@@ -9,6 +9,10 @@ permissions:
   pages: write
   id-token: write
 
+# Biến này ép GitHub Actions sử dụng Node 24 cho các tiến trình nội bộ
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
