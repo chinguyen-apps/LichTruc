@@ -21,8 +21,10 @@ const APP_FEATURES = [
 // --- HELPER: SHA256 Hashing ---
 async function sha256(message) {
   const msgBuffer = new TextEncoder().encode(message);
+  // Sử dụng đúng chuẩn SHA-256
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
+  // Chuyển sang chuỗi hex chữ thường
   const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   return hashHex;
 }
@@ -52,7 +54,7 @@ const formatDisplayDate = (date) => {
 const getWeekDays = (date) => {
   const d = new Date(date);
   const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Monday as first day
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); 
   const monday = new Date(d.setDate(diff));
   const week = [];
   for (let i = 0; i < 7; i++) {
@@ -90,19 +92,12 @@ const getMonthCalendarDays = (month, year) => {
   return days;
 };
 
-// Hàm gán khung giờ mặc định cho biểu đồ timeline dựa trên mã trực
 const getShiftTime = (code) => {
   if (!code) return { start: 8, end: 17 };
   const codeUpper = String(code).toUpperCase();
-  
-  // CẬP NHẬT: Trực cuối ngày (CN) và Cuối ngày Myanmar (CNM) từ 18h đến 6h sáng hôm sau (30h)
   if (codeUpper.includes('CN') || codeUpper.includes('CNM')) return { start: 18, end: 30 }; 
-  
-  // Trực hệ thống (HT), nghỉ lễ (NL) bắt đầu từ 6h sáng
   if (codeUpper.includes('HT')) return { start: 6, end: 18 }; 
   if (codeUpper.includes('NL')) return { start: 6, end: 18 };
-
-  // Các loại nội dung khác giữ nguyên
   if (codeUpper.includes('CT')) return { start: 8, end: 18 };
   if (codeUpper.includes('B1/2')) return { start: 8, end: 13 }; 
   if (codeUpper.includes('C1/2')) return { start: 13, end: 18 }; 
@@ -119,7 +114,7 @@ export default function App() {
   
   const [config, setConfig] = useState(() => {
     const saved = localStorage.getItem('appConfig');
-    const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbxg2bdC9vlQt1bE1vYwRZtADVekOX-eHZolnvW51NGgGJUa6lyRs0HDm1hp_HS3Dfea/exec';
+    const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbyUObfGhBL5u7X7XFuRYhVYmHVFi76ImK-0o4qaZtb_iceF1D2cWlduILN3m9960BvPlw/exec';
     
     if (saved) {
       const parsedConfig = JSON.parse(saved);
@@ -231,6 +226,7 @@ export default function App() {
       
       if (username === 'admin') {
         const hasNoPasswordInSheet = !userRecord || !userRecord.Password || userRecord.Password.trim() === '';
+        // Mật khẩu dự phòng nếu trong Sheet cột Password bị trống
         if (hasNoPasswordInSheet && password === 'cbs@123') {
           setCurrentUser({ 
             username: 'admin', 
@@ -243,7 +239,9 @@ export default function App() {
 
       if (userRecord && userRecord.Password) {
         const hashedPassword = await sha256(password);
-        if (userRecord.Password === hashedPassword) {
+        // CẬP NHẬT: So sánh không phân biệt hoa thường và bỏ khoảng trắng dư thừa từ Sheet
+        const storedHash = String(userRecord.Password).trim().toLowerCase();
+        if (storedHash === hashedPassword) {
           const userPerms = userRecord.Permissions ? userRecord.Permissions.split(',') : [];
           setCurrentUser({
             username: userRecord.User,
@@ -433,7 +431,7 @@ const EMP_COLORS = [
 const getEmpColor = (empId) => EMP_COLORS[((empId || 1) - 1) % EMP_COLORS.length];
 
 function ViewSchedule({ employees, scheduleData, abbreviations }) {
-  const [viewMode, setViewMode] = useState('week'); // 'day' | 'week' | 'month'
+  const [viewMode, setViewMode] = useState('week'); 
   const [baseDate, setBaseDate] = useState(new Date());
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -506,7 +504,6 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
   const weekDays = getWeekDays(baseDate);
   const monthDays = getMonthCalendarDays(baseDate.getMonth(), baseDate.getFullYear());
   
-  // Timeline bắt đầu từ 5h đến 24h (theo yêu cầu trước)
   const START_HOUR = 5;
   const END_HOUR = 24;
   const TOTAL_HOURS = END_HOUR - START_HOUR;
@@ -581,7 +578,6 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col h-full overflow-hidden">
              <div className="flex-1 overflow-auto custom-scrollbar relative">
                 <div className="min-w-[800px] flex flex-col min-h-full">
-                   {/* HEADER (Thanh giờ) - Bắt đầu từ 5h */}
                    <div className="flex border-b bg-gray-50 sticky top-0 z-30 shadow-sm">
                       <div className="w-36 sm:w-44 md:w-52 p-2 font-bold text-gray-600 text-[11px] sm:text-sm border-r flex items-center justify-center shrink-0 bg-gray-50 sticky left-0 z-40 shadow-[1px_0_0_0_#e5e7eb]">
                          Cán bộ
@@ -595,7 +591,6 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
                       </div>
                    </div>
                    
-                   {/* BODY (Danh sách cán bộ & Timeline) */}
                    <div className="flex flex-col pb-4 flex-1">
                       {dayDutiesByEmp.length > 0 ? dayDutiesByEmp.map((item) => {
                          const empColor = getEmpColor(item.emp.id);
@@ -614,17 +609,13 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
                                  </div>
                                  {item.shifts.map((shift, sIdx) => {
                                     const time = getShiftTime(shift.code);
-                                    
-                                    // Điều chỉnh vị trí hiển thị dựa trên START_HOUR (5h)
                                     const visualStart = Math.max(time.start, START_HOUR);
                                     const visualEnd = Math.min(time.end, END_HOUR); 
-                                    
-                                    if (visualEnd <= visualStart) return null; // Không hiển thị nếu nằm ngoài khung 5-24h
+                                    if (visualEnd <= visualStart) return null; 
 
                                     const left = `${((visualStart - START_HOUR) / TOTAL_HOURS) * 100}%`;
                                     const width = `${((visualEnd - visualStart) / TOTAL_HOURS) * 100}%`;
                                     
-                                    // CẬP NHẬT: Logic hiển thị Tooltip đặc thù cho CN/CNM
                                     let endTimeDisplay = "";
                                     if ((shift.code === 'CN' || shift.code === 'CNM') && time.start === 18) {
                                        endTimeDisplay = "18h - 6h sáng hôm sau";
@@ -758,8 +749,8 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
 // COMPONENT: EDIT SCHEDULE
 // ==========================================
 function EditSchedule({ employees, scheduleData, setScheduleData, abbreviations, config, refreshData, showAlert }) {
-  const [selectedMonth, setSelectedMonth] = useState(3);
-  const [selectedYear, setSelectedYear] = useState(2026);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const monthKey = `${selectedMonth}_${selectedYear}`;
   
   const [editGrid, setEditGrid] = useState({});
@@ -771,12 +762,12 @@ function EditSchedule({ employees, scheduleData, setScheduleData, abbreviations,
   useEffect(() => {
     const monthData = scheduleData[monthKey] || {};
     const initialGrid = {};
-    Object.keys(monthData).forEach(empId => {
-      initialGrid[empId] = { ...monthData[empId] };
+    employees.forEach(emp => {
+      initialGrid[emp.id] = { ...(monthData[emp.id] || {}) };
     });
     setEditGrid(initialGrid);
     setIsSaved(true);
-  }, [monthKey, scheduleData]);
+  }, [monthKey, scheduleData, employees]);
 
   const handleCellChange = (empId, dateStr, value) => {
     setEditGrid(prev => {
@@ -789,14 +780,47 @@ function EditSchedule({ employees, scheduleData, setScheduleData, abbreviations,
   };
 
   const handleSave = async () => {
+    if (!config.apiWebAppUrl) {
+      showAlert("Chưa cấu hình API Web App!", "error");
+      return;
+    }
+
     setIsSavingToCloud(true);
-    setScheduleData(prev => ({ ...prev, [monthKey]: editGrid }));
     
-    setTimeout(() => {
+    const payload = {
+      action: 'saveMonthSchedule',
+      mapping: config.mapping,
+      month: selectedMonth,
+      year: selectedYear,
+      gridData: employees.map(emp => ({
+        rowIndex: emp.rowIndex,
+        email: emp.email,
+        data: editGrid[emp.id] || {}
+      }))
+    };
+
+    try {
+      const res = await fetch(config.apiWebAppUrl, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+      });
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        setIsSaved(true);
+        showAlert("Đã lưu lịch trực thành công!");
+        refreshData();
+      } else {
+        showAlert("Lỗi khi lưu: " + result.error, "error");
+      }
+    } catch (error) {
+      console.error("Lỗi lưu:", error);
+      showAlert("Không thể kết nối tới máy chủ!", "error");
+    } finally {
       setIsSavingToCloud(false);
-      setIsSaved(true);
-      showAlert("Đã lưu lịch cục bộ!");
-    }, 800);
+    }
   };
 
   const handlePaste = (e, startEmpIdx, startDateIdx) => {
@@ -860,8 +884,8 @@ function EditSchedule({ employees, scheduleData, setScheduleData, abbreviations,
             }`}
             style={!isSaved ? { backgroundColor: HEADER_COLOR } : {}}
           >
-            <Save size={18} />
-            {isSavingToCloud ? 'Đang lưu...' : (isSaved ? 'Đã Lưu' : 'Lưu Thay Đổi')}
+            {isSavingToCloud ? <Loader className="animate-spin" size={18} /> : <Save size={18} />}
+            {isSavingToCloud ? 'Đang lưu...' : (isSaved ? 'Đã lưu' : 'Lưu lịch trực')}
           </button>
         </div>
       </div>
