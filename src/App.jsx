@@ -382,7 +382,7 @@ export default function App() {
           <button onClick={() => setIsMobileMenuOpen(true)} className="p-1 mr-3 hover:bg-white/10 rounded-lg transition-colors">
             <Menu size={24} />
           </button>
-          <span className="font-bold text-lg">Lịch Trực BIDV</span>
+          <span className="font-bold text-lg">Lịch Trực Nhóm Quản trị Core Banking</span>
         </div>
 
         {(!config.apiWebAppUrl && currentView !== 'SYSTEM_ADMIN') && (
