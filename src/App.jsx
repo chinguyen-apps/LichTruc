@@ -103,7 +103,7 @@ const getShiftTime = (code) => {
   if (codeUpper.includes('C1/2')) return { start: 13, end: 18 }; 
   if (codeUpper.includes('QT1')) return { start: 8, end: 16 };
   if (codeUpper.includes('QT2')) return { start: 16, end: 23.9 }; 
-  if (codeUpper.includes('NB')) return { start: 8, end: 18 };
+  if (codeUpper.includes('NB') || codeUpper.includes('NP')) return { start: 8, end: 18 };
   return { start: 8, end: 17 }; 
 };
 
@@ -114,7 +114,7 @@ export default function App() {
   
   const [config, setConfig] = useState(() => {
     const saved = localStorage.getItem('appConfig');
-    const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbxg2bdC9vlQt1bE1vYwRZtADVekOX-eHZolnvW51NGgGJUa6lyRs0HDm1hp_HS3Dfea/exec';
+    const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbyUObfGhBL5u7X7XFuRYhVYmHVFi76ImK-0o4qaZtb_iceF1D2cWlduILN3m9960BvPlw/exec';
     
     if (saved) {
       const parsedConfig = JSON.parse(saved);
@@ -454,7 +454,8 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
         Object.entries(scheduleData[monthKey][empId]).forEach(([dateStr, codeStr]) => {
           if (codeStr) {
             if (!duties[dateStr]) duties[dateStr] = [];
-            const codes = String(codeStr).split(',').map(c => c.trim()).filter(Boolean);
+            // CẬP NHẬT: Phân tách các mã trực bằng dấu khoảng trắng hoặc dấu phẩy
+            const codes = String(codeStr).split(/[\s,]+/).map(c => c.trim()).filter(Boolean);
             codes.forEach(code => {
                const abbr = abbreviations.find(a => a.code === code);
                duties[dateStr].push({ emp, code, meaning: abbr ? abbr.meaning : code });
