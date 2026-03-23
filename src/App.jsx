@@ -114,7 +114,7 @@ export default function App() {
   
   const [config, setConfig] = useState(() => {
     const saved = localStorage.getItem('appConfig');
-    const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbyUObfGhBL5u7X7XFuRYhVYmHVFi76ImK-0o4qaZtb_iceF1D2cWlduILN3m9960BvPlw/exec';
+    const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbxg2bdC9vlQt1bE1vYwRZtADVekOX-eHZolnvW51NGgGJUa6lyRs0HDm1hp_HS3Dfea/exec';
     
     if (saved) {
       const parsedConfig = JSON.parse(saved);
