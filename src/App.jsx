@@ -3,7 +3,7 @@ import {
   Calendar, Users, BookOpen, Settings, LogIn, LogOut, 
   Plus, Save, Edit, Trash2, Search, AlertCircle, Loader,
   ChevronLeft, ChevronRight, CalendarDays, Columns, Menu, X,
-  Star, Clock
+  Star, Clock, Gift
 } from 'lucide-react';
 
 // --- THEME COLORS ---
@@ -21,10 +21,8 @@ const APP_FEATURES = [
 // --- HELPER: SHA256 Hashing ---
 async function sha256(message) {
   const msgBuffer = new TextEncoder().encode(message);
-  // Sử dụng đúng chuẩn SHA-256
   const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
-  // Chuyển sang chuỗi hex chữ thường
   const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   return hashHex;
 }
@@ -107,6 +105,18 @@ const getShiftTime = (code) => {
   return { start: 8, end: 17 }; 
 };
 
+// Helper check birthday
+const isBirthday = (dateObj, birthdayStr) => {
+  if (!birthdayStr) return false;
+  const parts = String(birthdayStr).split('/');
+  if (parts.length >= 2) {
+     const bDay = parseInt(parts[0], 10);
+     const bMonth = parseInt(parts[1], 10);
+     return dateObj.getDate() === bDay && (dateObj.getMonth() + 1) === bMonth;
+  }
+  return false;
+};
+
 export default function App() {
   const [currentView, setCurrentView] = useState('VIEW_SCHEDULE');
   const [currentUser, setCurrentUser] = useState(null);
@@ -114,7 +124,7 @@ export default function App() {
   
   const [config, setConfig] = useState(() => {
     const saved = localStorage.getItem('appConfig');
-    const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbxg2bdC9vlQt1bE1vYwRZtADVekOX-eHZolnvW51NGgGJUa6lyRs0HDm1hp_HS3Dfea/exec';
+    const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbyUObfGhBL5u7X7XFuRYhVYmHVFi76ImK-0o4qaZtb_iceF1D2cWlduILN3m9960BvPlw/exec';
     
     if (saved) {
       const parsedConfig = JSON.parse(saved);
@@ -180,9 +190,18 @@ export default function App() {
 
         rawRows.forEach((row, rIdx) => {
           const empId = rIdx + 1; 
-          newEmployees.push({ id: empId, name: row[0], email: row[1], rowIndex: rIdx + 2 });
+          // CẬP NHẬT: Đọc cấu trúc 4 cột mới (Họ tên, Mã CB, Ngày sinh, Email)
+          newEmployees.push({ 
+            id: empId, 
+            name: row[0], 
+            empCode: row[1], 
+            birthday: row[2], 
+            email: row[3], 
+            rowIndex: rIdx + 2 
+          });
           
-          for (let cIdx = 2; cIdx < rawHeaders.length; cIdx++) {
+          // CẬP NHẬT: Lịch trực bắt đầu từ cột thứ 5 (index = 4)
+          for (let cIdx = 4; cIdx < rawHeaders.length; cIdx++) {
             const dateHeader = rawHeaders[cIdx];
             const val = row[cIdx];
             if (val && dateHeader) {
@@ -226,7 +245,6 @@ export default function App() {
       
       if (username === 'admin') {
         const hasNoPasswordInSheet = !userRecord || !userRecord.Password || userRecord.Password.trim() === '';
-        // Mật khẩu dự phòng nếu trong Sheet cột Password bị trống
         if (hasNoPasswordInSheet && password === 'cbs@123') {
           setCurrentUser({ 
             username: 'admin', 
@@ -239,7 +257,6 @@ export default function App() {
 
       if (userRecord && userRecord.Password) {
         const hashedPassword = await sha256(password);
-        // CẬP NHẬT: So sánh không phân biệt hoa thường và bỏ khoảng trắng dư thừa từ Sheet
         const storedHash = String(userRecord.Password).trim().toLowerCase();
         if (storedHash === hashedPassword) {
           const userPerms = userRecord.Permissions ? userRecord.Permissions.split(',') : [];
@@ -382,7 +399,7 @@ export default function App() {
           <button onClick={() => setIsMobileMenuOpen(true)} className="p-1 mr-3 hover:bg-white/10 rounded-lg transition-colors">
             <Menu size={24} />
           </button>
-          <span className="font-bold text-lg">Lịch Trực Nhóm Quản trị Core Banking</span>
+          <span className="font-bold text-lg">Lịch Trực BIDV</span>
         </div>
 
         {(!config.apiWebAppUrl && currentView !== 'SYSTEM_ADMIN') && (
@@ -443,7 +460,8 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
     const duties = {};
     const filteredEmps = employees.filter(e => 
       e.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      e.email?.toLowerCase().includes(searchTerm.toLowerCase())
+      e.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      e.empCode?.toLowerCase().includes(searchTerm.toLowerCase())
     );
     
     Object.keys(scheduleData).forEach(monthKey => {
@@ -454,7 +472,6 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
         Object.entries(scheduleData[monthKey][empId]).forEach(([dateStr, codeStr]) => {
           if (codeStr) {
             if (!duties[dateStr]) duties[dateStr] = [];
-            // CẬP NHẬT: Phân tách các mã trực bằng dấu khoảng trắng hoặc dấu phẩy
             const codes = String(codeStr).split(/[\s,]+/).map(c => c.trim()).filter(Boolean);
             codes.forEach(code => {
                const abbr = abbreviations.find(a => a.code === code);
@@ -553,7 +570,7 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
             <input 
               type="text" 
-              placeholder="Tìm cán bộ..." 
+              placeholder="Tìm tên, mã CB..." 
               className="pl-9 pr-4 py-2 w-full border rounded-lg focus:outline-none focus:ring-2 shadow-sm"
               style={{ backgroundColor: BG_CONTAINER, outlineColor: HEADER_COLOR }}
               value={searchTerm}
@@ -577,6 +594,17 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
       <div className="flex-1 min-h-0 flex flex-col">
         {viewMode === 'day' && (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col h-full overflow-hidden">
+             {/* Banner Sinh Nhật */}
+             {(() => {
+                 const bdaysToday = employees.filter(emp => isBirthday(baseDate, emp.birthday));
+                 if (bdaysToday.length === 0) return null;
+                 return (
+                    <div className="bg-gradient-to-r from-pink-50 to-pink-100 border-b border-pink-200 p-2 sm:p-2.5 flex items-center justify-center gap-2 text-pink-700 font-bold text-xs sm:text-sm z-30 shadow-sm">
+                        <Gift size={16} className="animate-bounce shrink-0" /> 
+                        <span className="truncate">Hôm nay là sinh nhật của: {bdaysToday.map(e => e.name).join(', ')} 🎂</span>
+                    </div>
+                 );
+             })()}
              <div className="flex-1 overflow-auto custom-scrollbar relative">
                 <div className="min-w-[800px] flex flex-col min-h-full">
                    <div className="flex border-b bg-gray-50 sticky top-0 z-30 shadow-sm">
@@ -595,17 +623,20 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
                    <div className="flex flex-col pb-4 flex-1">
                       {dayDutiesByEmp.length > 0 ? dayDutiesByEmp.map((item) => {
                          const empColor = getEmpColor(item.emp.id);
+                         const isBDay = isBirthday(baseDate, item.emp.birthday);
                          return (
-                           <div key={item.emp.id} className="flex border-b border-gray-100 hover:bg-gray-50 transition-colors group relative">
-                              <div className="w-36 sm:w-44 md:w-52 p-2 border-r flex items-center shrink-0 bg-white group-hover:bg-gray-50 z-20 sticky left-0 shadow-[1px_0_0_0_#f3f4f6]">
-                                 <div className="font-medium text-[11px] sm:text-sm text-gray-800 leading-tight break-words max-h-12 overflow-hidden" title={item.emp.name}>
+                           <div key={item.emp.id} className={`flex border-b hover:bg-gray-50 transition-colors group relative ${isBDay ? 'bg-pink-50/20 border-pink-100' : 'border-gray-100'}`}>
+                              <div className={`w-36 sm:w-44 md:w-52 p-2 border-r flex flex-col justify-center shrink-0 group-hover:bg-gray-50 z-20 sticky left-0 shadow-[1px_0_0_0_#f3f4f6] ${isBDay ? 'bg-pink-50' : 'bg-white'}`}>
+                                 <div className="font-bold text-[11px] sm:text-sm text-gray-800 leading-tight break-words flex items-center gap-1.5" title={item.emp.name}>
                                     {item.emp.name}
+                                    {isBDay && <Gift size={14} className="text-pink-500 shrink-0" title="Sinh nhật cán bộ" />}
                                  </div>
+                                 <div className="text-[9px] sm:text-[11px] text-gray-500 mt-0.5">Mã CB: {item.emp.empCode}</div>
                               </div>
-                              <div className="flex-1 relative h-10 sm:h-14">
+                              <div className="flex-1 relative h-12 sm:h-14">
                                  <div className="absolute inset-0 flex pointer-events-none">
                                     {timelineHours.slice(0, TOTAL_HOURS).map(h => (
-                                      <div key={h} className="flex-1 border-r border-dashed border-gray-100"></div>
+                                      <div key={h} className={`flex-1 border-r border-dashed ${isBDay ? 'border-pink-200/50' : 'border-gray-100'}`}></div>
                                     ))}
                                  </div>
                                  {item.shifts.map((shift, sIdx) => {
@@ -670,14 +701,35 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
                        </div>
                     </div>
                     <div className="p-2 sm:p-3 space-y-2.5 sm:space-y-3 flex-1 overflow-y-auto">
+                       {/* Hiển thị Sinh nhật Độc lập */}
+                       {(() => {
+                          const bdays = employees.filter(emp => isBirthday(date, emp.birthday));
+                          if (bdays.length > 0) {
+                             return (
+                                <div className="mb-2 flex flex-col gap-1.5">
+                                   {bdays.map(emp => (
+                                      <div key={`bday-${emp.id}`} className="text-[10px] sm:text-xs text-pink-700 bg-pink-50 border border-pink-200 rounded px-1.5 py-1 flex items-center justify-center gap-1.5 font-bold shadow-sm">
+                                         <Gift size={14} className="shrink-0" />
+                                         <span className="truncate">Sinh nhật {emp.name}</span>
+                                      </div>
+                                   ))}
+                                </div>
+                             )
+                          }
+                          return null;
+                       })()}
                        {dayDuties.length > 0 ? dayDuties.map((duty, idx) => {
                           const empColor = getEmpColor(duty.emp.id);
+                          const isBDay = isBirthday(date, duty.emp.birthday);
                           return (
-                          <div key={idx} className={`${empColor.bg} p-2 sm:p-2.5 rounded-lg border ${empColor.border} shadow-sm hover:shadow transition-shadow`}>
-                             <div className={`font-bold ${empColor.text} text-xs sm:text-sm mb-1.5 leading-tight`}>{duty.emp.name}</div>
+                          <div key={idx} className={`${isBDay ? 'bg-pink-50 border-pink-200 shadow-pink-100' : empColor.bg + ' ' + empColor.border} p-2 sm:p-2.5 rounded-lg border shadow-sm hover:shadow transition-shadow`}>
+                             <div className={`font-bold ${isBDay ? 'text-pink-700' : empColor.text} text-xs sm:text-sm mb-1.5 leading-tight flex items-center justify-between`}>
+                                <span className="truncate pr-1">{duty.emp.name}</span>
+                                {isBDay && <Gift size={14} className="text-pink-500 shrink-0" title="Sinh nhật cán bộ" />}
+                             </div>
                              <div className="flex items-start gap-1.5">
                                 <span className={`${empColor.badge} text-white px-1.5 py-0.5 rounded text-[10px] sm:text-xs shrink-0 font-medium tracking-wide shadow-sm`}>{duty.code}</span>
-                                <span className={`text-[10px] sm:text-xs ${empColor.text} leading-tight opacity-90`} title={duty.meaning}>{duty.meaning}</span>
+                                <span className={`text-[10px] sm:text-xs ${isBDay ? 'text-pink-600' : empColor.text} leading-tight opacity-90 line-clamp-2`} title={duty.meaning}>{duty.meaning}</span>
                              </div>
                           </div>
                           )
@@ -722,13 +774,34 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
                                    </div>
                                  ) : item.date.getDate()}
                               </div>
+                              
+                              {/* Hiển thị Sinh nhật Độc lập */}
+                              {(() => {
+                                 const bdays = employees.filter(emp => isBirthday(item.date, emp.birthday));
+                                 if (bdays.length === 0) return null;
+                                 return (
+                                     <div className="mb-1 flex flex-col gap-1 px-0.5">
+                                         {bdays.map(emp => (
+                                             <div key={`bday-${emp.id}`} className="text-[9px] sm:text-[10px] text-pink-700 bg-pink-50/90 border border-pink-200 rounded px-1 py-0.5 flex items-center gap-1 font-bold shadow-sm" title={`Sinh nhật: ${emp.name}`}>
+                                                 <Gift size={10} className="shrink-0 text-pink-500" />
+                                                 <span className="truncate">{emp.name}</span>
+                                             </div>
+                                         ))}
+                                     </div>
+                                 );
+                              })()}
+
                               <div className="flex-1 space-y-1 sm:space-y-1.5 overflow-y-auto pr-0.5 sm:pr-1 custom-scrollbar">
                                  {dayDuties.map((duty, i) => {
                                      const empColor = getEmpColor(duty.emp.id);
+                                     const isBDay = isBirthday(item.date, duty.emp.birthday);
                                      return (
-                                     <div key={i} className={`text-xs flex items-center gap-1 sm:gap-1.5 p-1 sm:p-1.5 rounded-md ${empColor.bg} border ${empColor.border} hover:opacity-80 transition-opacity cursor-pointer`} title={`${duty.emp.name} - ${duty.meaning}`}>
+                                     <div key={i} className={`text-xs flex items-center gap-1 p-1 sm:p-1.5 rounded-md border hover:opacity-80 transition-opacity cursor-pointer ${isBDay ? 'bg-pink-50 border-pink-200' : empColor.bg + ' ' + empColor.border}`} title={`${duty.emp.name} - ${duty.meaning}`}>
                                         <span className={`font-bold text-white shrink-0 text-[9px] sm:text-[10px] ${empColor.badge} px-1 sm:px-1.5 py-0.5 rounded shadow-sm leading-none`}>{duty.code}</span>
-                                        <span className={`truncate ${empColor.text} font-medium text-[10px] sm:text-xs leading-none`}>{duty.emp.name}</span>
+                                        <span className={`truncate font-medium text-[10px] sm:text-xs leading-none flex items-center gap-1 ${isBDay ? 'text-pink-700' : empColor.text}`}>
+                                           {duty.emp.name}
+                                           {isBDay && <Gift size={10} className="text-pink-500 shrink-0" />}
+                                        </span>
                                      </div>
                                      )
                                  })}
@@ -957,6 +1030,8 @@ function ManageEmployees({ employees, config, refreshData, showAlert, showConfir
       mapping: config.mapping,
       employee: {
         name: formData.get('name'),
+        empCode: formData.get('empCode'),
+        birthday: formData.get('birthday'),
         email: formData.get('email'),
         rowIndex: currentEmp?.rowIndex || null
       }
@@ -1026,13 +1101,23 @@ function ManageEmployees({ employees, config, refreshData, showAlert, showConfir
         <div className="p-4 sm:p-6 rounded-lg shadow-sm border mb-6" style={{ backgroundColor: BG_CONTAINER }}>
           <h2 className="text-lg font-bold mb-4" style={{ color: HEADER_COLOR }}>{currentEmp ? 'Sửa Cán Bộ' : 'Thêm Cán Bộ Mới'}</h2>
           <form onSubmit={handleSave} className="space-y-4">
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">Họ và tên</label>
-              <input name="name" defaultValue={currentEmp?.name} required className="w-full border rounded p-2 focus:ring-2 focus:outline-none" style={{ focusRingColor: HEADER_COLOR }} />
-            </div>
-            <div>
-              <label className="block text-sm font-bold text-gray-700 mb-1">Email</label>
-              <input name="email" type="email" defaultValue={currentEmp?.email} required className="w-full border rounded p-2 focus:ring-2 focus:outline-none" style={{ focusRingColor: HEADER_COLOR }} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+               <div>
+                 <label className="block text-sm font-bold text-gray-700 mb-1">Họ và tên</label>
+                 <input name="name" defaultValue={currentEmp?.name} required className="w-full border rounded p-2 focus:ring-2 focus:outline-none" style={{ focusRingColor: HEADER_COLOR }} />
+               </div>
+               <div>
+                 <label className="block text-sm font-bold text-gray-700 mb-1">Mã CB</label>
+                 <input name="empCode" defaultValue={currentEmp?.empCode} className="w-full border rounded p-2 focus:ring-2 focus:outline-none" style={{ focusRingColor: HEADER_COLOR }} />
+               </div>
+               <div>
+                 <label className="block text-sm font-bold text-gray-700 mb-1">Ngày sinh</label>
+                 <input name="birthday" defaultValue={currentEmp?.birthday} placeholder="DD/MM/YYYY" className="w-full border rounded p-2 focus:ring-2 focus:outline-none" style={{ focusRingColor: HEADER_COLOR }} />
+               </div>
+               <div>
+                 <label className="block text-sm font-bold text-gray-700 mb-1">Email</label>
+                 <input name="email" type="email" defaultValue={currentEmp?.email} className="w-full border rounded p-2 focus:ring-2 focus:outline-none" style={{ focusRingColor: HEADER_COLOR }} />
+               </div>
             </div>
             <div className="flex gap-2 pt-2">
               <button type="submit" disabled={isSaving} className="flex-1 sm:flex-none text-white px-6 py-2 rounded font-bold hover:opacity-90" style={{ backgroundColor: HEADER_COLOR }}>
@@ -1045,20 +1130,24 @@ function ManageEmployees({ employees, config, refreshData, showAlert, showConfir
       )}
 
       <div className="rounded-lg shadow-sm border overflow-x-auto" style={{ backgroundColor: BG_CONTAINER }}>
-        <table className="w-full text-left border-collapse min-w-[500px]">
+        <table className="w-full text-left border-collapse min-w-[600px]">
           <thead className="border-b" style={{ backgroundColor: '#e6f0ee', color: HEADER_COLOR }}>
             <tr>
               <th className="p-3 whitespace-nowrap">Họ và tên</th>
+              <th className="p-3 whitespace-nowrap">Mã CB</th>
+              <th className="p-3 whitespace-nowrap">Ngày sinh</th>
               <th className="p-3 whitespace-nowrap">Email</th>
               <th className="p-3 w-24 text-center whitespace-nowrap">Thao tác</th>
             </tr>
           </thead>
           <tbody>
             {employees.length === 0 ? (
-              <tr><td colSpan={3} className="p-6 text-center text-gray-500">Chưa có dữ liệu</td></tr>
+              <tr><td colSpan={5} className="p-6 text-center text-gray-500">Chưa có dữ liệu</td></tr>
             ) : employees.map(emp => (
               <tr key={emp.id} className="border-b hover:bg-gray-50">
                 <td className="p-3 font-medium text-gray-800">{emp.name}</td>
+                <td className="p-3 text-gray-700 font-medium text-xs sm:text-sm">{emp.empCode}</td>
+                <td className="p-3 text-gray-600 text-xs sm:text-sm whitespace-nowrap">{emp.birthday}</td>
                 <td className="p-3 text-gray-600 text-xs sm:text-sm">{emp.email}</td>
                 <td className="p-3 flex justify-center gap-3">
                   <button onClick={() => { setCurrentEmp(emp); setIsEditing(true); }} className="text-blue-600 hover:bg-blue-50 p-1.5 rounded" title="Sửa"><Edit size={16} /></button>
