@@ -533,37 +533,37 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
 
   const dayNames = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'CN'];
 
-  const selectedDateStr = getFormattedDateString(baseDate);
-  const dayDutiesRaw = dailyDuties[selectedDateStr] || [];
-  const dayDutiesByEmp = useMemo(() => {
+  // Hàm xử lý gom nhóm và sắp xếp chung cho cả Ngày và Tuần
+  const processDayDuties = (rawDuties) => {
      const map = {};
-     dayDutiesRaw.forEach(duty => {
+     rawDuties.forEach(duty => {
         if (!map[duty.emp.id]) map[duty.emp.id] = { emp: duty.emp, shifts: [] };
         map[duty.emp.id].shifts.push(duty);
      });
      
      const list = Object.values(map);
      
-     // Hàm kiểm tra mã nghỉ
      const isRestingCode = (code) => {
         const upper = String(code).toUpperCase();
         return upper.includes('NB') || upper.includes('NP') || upper.includes('B1/2') || upper.includes('C1/2');
      };
 
-     // Gán thuộc tính trạng thái và giờ bắt đầu sớm nhất cho từng cán bộ
      list.forEach(item => {
-        item.isWorking = item.shifts.some(s => !isRestingCode(s.code)); // Vừa trực vừa nghỉ => Tính là Trực
+        item.isWorking = item.shifts.some(s => !isRestingCode(s.code)); // Có mã trực => Tính là Trực
         item.earliestStart = Math.min(...item.shifts.map(s => getShiftTime(s.code).start));
      });
 
-     // Sắp xếp: Cán bộ trực lên trước, sau đó xếp theo giờ bắt đầu sớm nhất
      return list.sort((a, b) => {
         if (a.isWorking !== b.isWorking) {
-           return a.isWorking ? -1 : 1; // True (Trực) xếp trên False (Nghỉ)
+           return a.isWorking ? -1 : 1; 
         }
-        return a.earliestStart - b.earliestStart; // Sắp xếp theo timeline từ bé đến lớn
+        return a.earliestStart - b.earliestStart; 
      });
-  }, [dayDutiesRaw]);
+  };
+
+  const selectedDateStr = getFormattedDateString(baseDate);
+  const dayDutiesRaw = dailyDuties[selectedDateStr] || [];
+  const dayDutiesByEmp = useMemo(() => processDayDuties(dayDutiesRaw), [dayDutiesRaw]);
 
   return (
     <div className="p-4 sm:p-6 h-full flex flex-col">
@@ -644,7 +644,6 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
                          const empColor = getEmpColor(item.emp.id);
                          const isBDay = isBirthday(baseDate, item.emp.birthday);
                          
-                         // CẬP NHẬT: Xác định vị trí ranh giới giữa 2 nhóm
                          const isFirstWorking = item.isWorking && index === 0;
                          const isFirstResting = !item.isWorking && (index === 0 || dayDutiesByEmp[index - 1].isWorking);
 
@@ -726,7 +725,8 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
           <div className="flex gap-4 overflow-x-auto pb-4 h-full snap-x">
             {weekDays.map((date, index) => {
                const dateStr = getFormattedDateString(date);
-               const dayDuties = dailyDuties[dateStr] || [];
+               const dayDutiesRaw = dailyDuties[dateStr] || [];
+               const processedList = processDayDuties(dayDutiesRaw);
                const isToday = getFormattedDateString(new Date()) === dateStr;
                const isWeekend = date.getDay() === 0 || date.getDay() === 6;
 
@@ -742,13 +742,13 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
                          {isToday && <Star size={14} className="fill-yellow-400 text-yellow-400 drop-shadow-sm mb-0.5" />}
                        </div>
                     </div>
-                    <div className="p-2 sm:p-3 space-y-2.5 sm:space-y-3 flex-1 overflow-y-auto">
-                       {/* Hiển thị Sinh nhật Độc lập */}
+                    <div className="flex-1 flex flex-col min-h-0">
+                       {/* Sinh nhật Độc lập - Giữ ở trên cùng */}
                        {(() => {
                           const bdays = employees.filter(emp => isBirthday(date, emp.birthday));
                           if (bdays.length > 0) {
                              return (
-                                <div className="mb-2 flex flex-col gap-1.5">
+                                <div className="p-2 pb-0 flex flex-col gap-1.5 shrink-0">
                                    {bdays.map(emp => (
                                       <div key={`bday-${emp.id}`} className="text-[10px] sm:text-xs text-pink-700 bg-pink-50 border border-pink-200 rounded px-1.5 py-1 flex items-center justify-center gap-1.5 font-bold shadow-sm">
                                          <Gift size={14} className="shrink-0" />
@@ -760,26 +760,57 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
                           }
                           return null;
                        })()}
-                       {dayDuties.length > 0 ? dayDuties.map((duty, idx) => {
-                          const empColor = getEmpColor(duty.emp.id);
-                          const isBDay = isBirthday(date, duty.emp.birthday);
-                          return (
-                          <div key={idx} className={`${isBDay ? 'bg-pink-50 border-pink-200 shadow-pink-100' : empColor.bg + ' ' + empColor.border} p-2 sm:p-2.5 rounded-lg border shadow-sm hover:shadow transition-shadow`}>
-                             <div className={`font-bold ${isBDay ? 'text-pink-700' : empColor.text} text-xs sm:text-sm mb-1.5 leading-tight flex items-center justify-between`}>
-                                <span className="truncate pr-1">{duty.emp.name}</span>
-                                {isBDay && <Gift size={14} className="text-pink-500 shrink-0" title="Sinh nhật cán bộ" />}
-                             </div>
-                             <div className="flex items-start gap-1.5">
-                                <span className={`${empColor.badge} text-white px-1.5 py-0.5 rounded text-[10px] sm:text-xs shrink-0 font-medium tracking-wide shadow-sm`}>{duty.code}</span>
-                                <span className={`text-[10px] sm:text-xs ${isBDay ? 'text-pink-600' : empColor.text} leading-tight opacity-90 line-clamp-2`} title={duty.meaning}>{duty.meaning}</span>
-                             </div>
-                          </div>
-                          )
-                       }) : (
-                         <div className="text-gray-400 text-center text-xs mt-6 italic flex flex-col items-center gap-2">
-                           Trống
-                         </div>
-                       )}
+
+                       {/* Chia thành 2 khối Trực và Nghỉ (50/50 độc lập) */}
+                       {(() => {
+                           const workingList = processedList.filter(item => item.isWorking);
+                           const restingList = processedList.filter(item => !item.isWorking);
+
+                           const renderCard = (item) => {
+                              const empColor = getEmpColor(item.emp.id);
+                              const isBDay = isBirthday(date, item.emp.birthday);
+                              return (
+                                  <div key={item.emp.id} className={`${isBDay ? 'bg-pink-50 border-pink-200 shadow-pink-100' : empColor.bg + ' ' + empColor.border} p-2 sm:p-2.5 rounded-lg border shadow-sm hover:shadow transition-shadow shrink-0`}>
+                                     <div className={`font-bold ${isBDay ? 'text-pink-700' : empColor.text} text-xs sm:text-sm mb-1.5 leading-tight flex items-center justify-between`}>
+                                        <span className="truncate pr-1">{item.emp.name}</span>
+                                        {isBDay && <Gift size={14} className="text-pink-500 shrink-0" title="Sinh nhật cán bộ" />}
+                                     </div>
+                                     <div className="flex flex-col gap-1.5">
+                                        {item.shifts.map((shift, sIdx) => (
+                                           <div key={sIdx} className="flex items-start gap-1.5">
+                                              <span className={`${empColor.badge} text-white px-1.5 py-0.5 rounded text-[10px] sm:text-xs shrink-0 font-medium tracking-wide shadow-sm`}>{shift.code}</span>
+                                              <span className={`text-[10px] sm:text-xs ${isBDay ? 'text-pink-600' : empColor.text} leading-tight opacity-90 line-clamp-2`} title={shift.meaning}>{shift.meaning}</span>
+                                           </div>
+                                        ))}
+                                     </div>
+                                  </div>
+                              );
+                           };
+
+                           return (
+                               <div className="flex-1 flex flex-col min-h-0 mt-2">
+                                   {/* Nửa trên: Cán bộ trực */}
+                                   <div className="flex-1 flex flex-col min-h-0 border-b border-gray-200">
+                                       <div className="px-2 pb-1 shrink-0">
+                                           <span className="text-[10px] sm:text-[11px] font-bold text-emerald-600 uppercase tracking-widest decoration-emerald-400 decoration-2 underline underline-offset-4">Cán Bộ Trực</span>
+                                       </div>
+                                       <div className="flex-1 overflow-y-auto p-2 pt-1.5 custom-scrollbar flex flex-col gap-2">
+                                           {workingList.length > 0 ? workingList.map(renderCard) : <div className="text-gray-400 text-center text-xs italic py-2">Trống</div>}
+                                       </div>
+                                   </div>
+
+                                   {/* Nửa dưới: Cán bộ nghỉ */}
+                                   <div className="flex-1 flex flex-col min-h-0 pt-2 bg-gray-50/30">
+                                       <div className="px-2 pb-1 shrink-0">
+                                           <span className="text-[10px] sm:text-[11px] font-bold text-gray-500 uppercase tracking-widest decoration-gray-400 decoration-2 underline underline-offset-4">Cán Bộ Nghỉ</span>
+                                       </div>
+                                       <div className="flex-1 overflow-y-auto p-2 pt-1.5 custom-scrollbar flex flex-col gap-2">
+                                           {restingList.length > 0 ? restingList.map(renderCard) : <div className="text-gray-400 text-center text-xs italic py-2">Trống</div>}
+                                       </div>
+                                   </div>
+                               </div>
+                           );
+                       })()}
                     </div>
                  </div>
                )
