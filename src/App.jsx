@@ -761,7 +761,7 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
                           return null;
                        })()}
 
-                       {/* Chia thành 2 khối Trực và Nghỉ (50/50 độc lập) */}
+                       {/* Chia thành khối Trực và Nghỉ */}
                        {(() => {
                            const workingList = processedList.filter(item => item.isWorking);
                            const restingList = processedList.filter(item => !item.isWorking);
@@ -786,6 +786,20 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
                                   </div>
                               );
                            };
+
+                           // Rêng cuối tuần, không phân chia Trực và Nghỉ, ẩn hoàn toàn danh sách Cán Bộ Nghỉ
+                           if (isWeekend) {
+                               return (
+                                   <div className="flex-1 flex flex-col min-h-0 mt-2">
+                                       <div className="px-2 pb-1 shrink-0">
+                                           <span className="text-[10px] sm:text-[11px] font-bold text-emerald-600 uppercase tracking-widest decoration-emerald-400 decoration-2 underline underline-offset-4">Cán Bộ Trực</span>
+                                       </div>
+                                       <div className="flex-1 overflow-y-auto p-2 pt-1.5 custom-scrollbar flex flex-col gap-2">
+                                           {workingList.length > 0 ? workingList.map(renderCard) : <div className="text-gray-400 text-center text-xs italic py-2">Trống</div>}
+                                       </div>
+                                   </div>
+                               );
+                           }
 
                            return (
                                <div className="flex-1 flex flex-col min-h-0 mt-2">
