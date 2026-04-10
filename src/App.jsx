@@ -190,7 +190,6 @@ export default function App() {
 
         rawRows.forEach((row, rIdx) => {
           const empId = rIdx + 1; 
-          // CẬP NHẬT: Đọc cấu trúc 4 cột mới (Họ tên, Mã CB, Ngày sinh, Email)
           newEmployees.push({ 
             id: empId, 
             name: row[0], 
@@ -200,7 +199,6 @@ export default function App() {
             rowIndex: rIdx + 2 
           });
           
-          // CẬP NHẬT: Lịch trực bắt đầu từ cột thứ 5 (index = 4)
           for (let cIdx = 4; cIdx < rawHeaders.length; cIdx++) {
             const dateHeader = rawHeaders[cIdx];
             const val = row[cIdx];
@@ -543,7 +541,28 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
         if (!map[duty.emp.id]) map[duty.emp.id] = { emp: duty.emp, shifts: [] };
         map[duty.emp.id].shifts.push(duty);
      });
-     return Object.values(map);
+     
+     const list = Object.values(map);
+     
+     // Hàm kiểm tra mã nghỉ
+     const isRestingCode = (code) => {
+        const upper = String(code).toUpperCase();
+        return upper.includes('NB') || upper.includes('NP') || upper.includes('B1/2') || upper.includes('C1/2');
+     };
+
+     // Gán thuộc tính trạng thái và giờ bắt đầu sớm nhất cho từng cán bộ
+     list.forEach(item => {
+        item.isWorking = item.shifts.some(s => !isRestingCode(s.code)); // Vừa trực vừa nghỉ => Tính là Trực
+        item.earliestStart = Math.min(...item.shifts.map(s => getShiftTime(s.code).start));
+     });
+
+     // Sắp xếp: Cán bộ trực lên trước, sau đó xếp theo giờ bắt đầu sớm nhất
+     return list.sort((a, b) => {
+        if (a.isWorking !== b.isWorking) {
+           return a.isWorking ? -1 : 1; // True (Trực) xếp trên False (Nghỉ)
+        }
+        return a.earliestStart - b.earliestStart; // Sắp xếp theo timeline từ bé đến lớn
+     });
   }, [dayDutiesRaw]);
 
   return (
@@ -621,55 +640,78 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
                    </div>
                    
                    <div className="flex flex-col pb-4 flex-1">
-                      {dayDutiesByEmp.length > 0 ? dayDutiesByEmp.map((item) => {
+                      {dayDutiesByEmp.length > 0 ? dayDutiesByEmp.map((item, index) => {
                          const empColor = getEmpColor(item.emp.id);
                          const isBDay = isBirthday(baseDate, item.emp.birthday);
-                         return (
-                           <div key={item.emp.id} className={`flex border-b hover:bg-gray-50 transition-colors group relative ${isBDay ? 'bg-pink-50/20 border-pink-100' : 'border-gray-100'}`}>
-                              <div className={`w-36 sm:w-44 md:w-52 p-2 border-r flex flex-col justify-center shrink-0 group-hover:bg-gray-50 z-20 sticky left-0 shadow-[1px_0_0_0_#f3f4f6] ${isBDay ? 'bg-pink-50' : 'bg-white'}`}>
-                                 <div className="font-bold text-[11px] sm:text-sm text-gray-800 leading-tight break-words flex items-center gap-1.5" title={item.emp.name}>
-                                    {item.emp.name}
-                                    {isBDay && <Gift size={14} className="text-pink-500 shrink-0" title="Sinh nhật cán bộ" />}
-                                 </div>
-                                 <div className="text-[9px] sm:text-[11px] text-gray-500 mt-0.5">Mã CB: {item.emp.empCode}</div>
-                              </div>
-                              <div className="flex-1 relative h-12 sm:h-14">
-                                 <div className="absolute inset-0 flex pointer-events-none">
-                                    {timelineHours.slice(0, TOTAL_HOURS).map(h => (
-                                      <div key={h} className={`flex-1 border-r border-dashed ${isBDay ? 'border-pink-200/50' : 'border-gray-100'}`}></div>
-                                    ))}
-                                 </div>
-                                 {item.shifts.map((shift, sIdx) => {
-                                    const time = getShiftTime(shift.code);
-                                    const visualStart = Math.max(time.start, START_HOUR);
-                                    const visualEnd = Math.min(time.end, END_HOUR); 
-                                    if (visualEnd <= visualStart) return null; 
+                         
+                         // CẬP NHẬT: Xác định vị trí ranh giới giữa 2 nhóm
+                         const isFirstWorking = item.isWorking && index === 0;
+                         const isFirstResting = !item.isWorking && (index === 0 || dayDutiesByEmp[index - 1].isWorking);
 
-                                    const left = `${((visualStart - START_HOUR) / TOTAL_HOURS) * 100}%`;
-                                    const width = `${((visualEnd - visualStart) / TOTAL_HOURS) * 100}%`;
-                                    
-                                    let endTimeDisplay = "";
-                                    if ((shift.code === 'CN' || shift.code === 'CNM') && time.start === 18) {
-                                       endTimeDisplay = "18h - 6h sáng hôm sau";
-                                    } else {
-                                       const rawEnd = time.end > 24 ? `${Math.floor(time.end) - 24}h sáng hôm sau` : `${Math.floor(time.end)}h`;
-                                       endTimeDisplay = `${Math.floor(time.start)}h - ${rawEnd}`;
-                                    }
-                                    
-                                    return (
-                                      <div
-                                         key={sIdx}
-                                         className={`absolute top-1 bottom-1 sm:top-1.5 sm:bottom-1.5 rounded ${empColor.bg} border ${empColor.border} shadow-sm flex items-center px-1 sm:px-2 overflow-hidden cursor-pointer hover:opacity-90 transition-all hover:scale-y-105 z-10`}
-                                         style={{ left, width }}
-                                         title={`${shift.code}: ${shift.meaning} (${endTimeDisplay})`}
-                                      >
-                                         <span className={`font-bold text-white text-[8px] sm:text-[10px] ${empColor.badge} px-1 rounded mr-1 sm:mr-1.5 shrink-0 leading-tight`}>{shift.code}</span>
-                                         <span className={`truncate text-[8px] sm:text-[10px] leading-tight ${empColor.text}`}>{shift.meaning}</span>
-                                      </div>
-                                    )
-                                 })}
+                         return (
+                           <React.Fragment key={item.emp.id}>
+                              {isFirstWorking && (
+                                 <div className="flex border-b border-emerald-100 bg-emerald-50 relative z-20">
+                                    <div className="w-36 sm:w-44 md:w-52 px-2 py-1.5 text-xs font-bold text-emerald-700 uppercase tracking-wider sticky left-0 bg-emerald-50 shadow-[1px_0_0_0_#d1fae5] flex items-center shrink-0">
+                                       Cán Bộ Trực
+                                    </div>
+                                    <div className="flex-1"></div>
+                                 </div>
+                              )}
+                              {isFirstResting && (
+                                 <div className="flex border-y border-gray-200 bg-gray-100 relative z-20 mt-4">
+                                    <div className="w-36 sm:w-44 md:w-52 px-2 py-1.5 text-xs font-bold text-gray-600 uppercase tracking-wider sticky left-0 bg-gray-100 shadow-[1px_0_0_0_#e5e7eb] flex items-center shrink-0">
+                                       Cán Bộ Nghỉ
+                                    </div>
+                                    <div className="flex-1"></div>
+                                 </div>
+                              )}
+                              <div className={`flex border-b hover:bg-gray-50 transition-colors group relative ${isBDay ? 'bg-pink-50/20 border-pink-100' : 'border-gray-100'}`}>
+                                 <div className={`w-36 sm:w-44 md:w-52 p-2 border-r flex flex-col justify-center shrink-0 group-hover:bg-gray-50 z-20 sticky left-0 shadow-[1px_0_0_0_#f3f4f6] ${isBDay ? 'bg-pink-50' : 'bg-white'}`}>
+                                    <div className="font-bold text-[11px] sm:text-sm text-gray-800 leading-tight break-words flex items-center gap-1.5" title={item.emp.name}>
+                                       {item.emp.name}
+                                       {isBDay && <Gift size={14} className="text-pink-500 shrink-0" title="Sinh nhật cán bộ" />}
+                                    </div>
+                                    <div className="text-[9px] sm:text-[11px] text-gray-500 mt-0.5">Mã CB: {item.emp.empCode}</div>
+                                 </div>
+                                 <div className="flex-1 relative h-12 sm:h-14">
+                                    <div className="absolute inset-0 flex pointer-events-none">
+                                       {timelineHours.slice(0, TOTAL_HOURS).map(h => (
+                                         <div key={h} className={`flex-1 border-r border-dashed ${isBDay ? 'border-pink-200/50' : 'border-gray-100'}`}></div>
+                                       ))}
+                                    </div>
+                                    {item.shifts.map((shift, sIdx) => {
+                                       const time = getShiftTime(shift.code);
+                                       const visualStart = Math.max(time.start, START_HOUR);
+                                       const visualEnd = Math.min(time.end, END_HOUR); 
+                                       if (visualEnd <= visualStart) return null; 
+
+                                       const left = `${((visualStart - START_HOUR) / TOTAL_HOURS) * 100}%`;
+                                       const width = `${((visualEnd - visualStart) / TOTAL_HOURS) * 100}%`;
+                                       
+                                       let endTimeDisplay = "";
+                                       if ((shift.code === 'CN' || shift.code === 'CNM') && time.start === 18) {
+                                          endTimeDisplay = "18h - 6h sáng hôm sau";
+                                       } else {
+                                          const rawEnd = time.end > 24 ? `${Math.floor(time.end) - 24}h sáng hôm sau` : `${Math.floor(time.end)}h`;
+                                          endTimeDisplay = `${Math.floor(time.start)}h - ${rawEnd}`;
+                                       }
+                                       
+                                       return (
+                                         <div
+                                            key={sIdx}
+                                            className={`absolute top-1 bottom-1 sm:top-1.5 sm:bottom-1.5 rounded ${empColor.bg} border ${empColor.border} shadow-sm flex items-center px-1 sm:px-2 overflow-hidden cursor-pointer hover:opacity-90 transition-all hover:scale-y-105 z-10`}
+                                            style={{ left, width }}
+                                            title={`${shift.code}: ${shift.meaning} (${endTimeDisplay})`}
+                                         >
+                                            <span className={`font-bold text-white text-[8px] sm:text-[10px] ${empColor.badge} px-1 rounded mr-1 sm:mr-1.5 shrink-0 leading-tight`}>{shift.code}</span>
+                                            <span className={`truncate text-[8px] sm:text-[10px] leading-tight ${empColor.text}`}>{shift.meaning}</span>
+                                         </div>
+                                       )
+                                    })}
+                                 </div>
                               </div>
-                           </div>
+                           </React.Fragment>
                          );
                       }) : (
                         <div className="p-8 text-center text-gray-400 text-sm italic w-full absolute left-0 right-0">Không có cán bộ nào được phân lịch trực trong ngày này.</div>
