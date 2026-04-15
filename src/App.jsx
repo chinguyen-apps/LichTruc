@@ -12,12 +12,46 @@ const HEADER_COLOR = '#006D5B';
 const BG_BODY = '#f4f6f8';
 const BG_CONTAINER = '#ffffff';
 
-const APP_FEATURES = [
-  { id: 'EDIT_SCHEDULE', name: 'Cập nhật lịch trực' },
-  { id: 'MANAGE_EMPLOYEES', name: 'Quản lý cán bộ' },
-  { id: 'MANAGE_ABBRS', name: 'Quản lý từ viết tắt' },
-  { id: 'SYSTEM_ADMIN', name: 'Quản trị hệ thống' }
+// --- ĐỊNH NGHĨA QUYỀN HẠN CHI TIẾT ---
+const PERMISSION_GROUPS = [
+  {
+    title: 'Lịch Trực',
+    items: [
+      { id: 'EDIT_SCHEDULE', name: 'Cập nhật/Lưu lịch trực' }
+    ]
+  },
+  {
+    title: 'Quản lý Cán Bộ',
+    items: [
+      { id: 'VIEW_EMPLOYEES', name: 'Truy cập màn hình' },
+      { id: 'ADD_EMPLOYEE', name: 'Thêm cán bộ mới' },
+      { id: 'EDIT_EMPLOYEE', name: 'Sửa thông tin cán bộ' },
+      { id: 'DELETE_EMPLOYEE', name: 'Xóa cán bộ' }
+    ]
+  },
+  {
+    title: 'Quản lý Từ Viết Tắt',
+    items: [
+      { id: 'VIEW_ABBRS', name: 'Truy cập màn hình' },
+      { id: 'ADD_ABBR', name: 'Thêm từ viết tắt' },
+      { id: 'EDIT_ABBR', name: 'Sửa từ viết tắt' },
+      { id: 'DELETE_ABBR', name: 'Xóa từ viết tắt' }
+    ]
+  },
+  {
+    title: 'Quản trị Hệ Thống',
+    items: [
+      { id: 'MANAGE_SYSTEM', name: 'Cấu hình API & Quản lý Tài khoản' },
+      { id: 'MANAGE_ANNOUNCEMENTS', name: 'Quản lý Thông báo ghim' }
+    ]
+  }
 ];
+
+const getAllPermissionIds = () => {
+  let ids = [];
+  PERMISSION_GROUPS.forEach(g => g.items.forEach(i => ids.push(i.id)));
+  return ids;
+};
 
 // --- HELPER: SHA256 Hashing ---
 async function sha256(message) {
@@ -123,7 +157,6 @@ const isBirthday = (dateObj, birthdayStr) => {
 // ==========================================
 const Linkify = ({ text }) => {
   if (!text) return null;
-  // Biểu thức chính quy phát hiện URL
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const parts = text.split(urlRegex);
   
@@ -172,7 +205,6 @@ const CopyButton = ({ text, className = "" }) => {
     </button>
   );
 };
-
 
 export default function App() {
   const [currentView, setCurrentView] = useState('VIEW_SCHEDULE');
@@ -309,7 +341,7 @@ export default function App() {
           setCurrentUser({ 
             username: 'admin', 
             name: 'Quản trị viên',
-            permissions: APP_FEATURES.map(f => f.id)
+            permissions: getAllPermissionIds()
           });
           return true;
         }
@@ -323,7 +355,7 @@ export default function App() {
           setCurrentUser({
             username: userRecord.User,
             name: userRecord.User,
-            permissions: username === 'admin' ? APP_FEATURES.map(f => f.id) : userPerms
+            permissions: username === 'admin' ? getAllPermissionIds() : userPerms
           });
           return true;
         }
@@ -347,6 +379,10 @@ export default function App() {
     setIsMobileMenuOpen(false); 
   };
 
+  // Helper check roles
+  const hasPerm = (permId) => currentUser?.permissions?.includes(permId);
+  const userPermissions = currentUser?.permissions || [];
+
   const renderMainContent = () => {
     if (isLoading) {
       return <div className="flex-1 flex items-center justify-center"><Loader className="animate-spin" style={{ color: HEADER_COLOR }} size={48} /></div>;
@@ -356,22 +392,22 @@ export default function App() {
       case 'VIEW_SCHEDULE':
         return <ViewSchedule employees={employees} scheduleData={scheduleData} abbreviations={abbreviations} />;
       case 'EDIT_SCHEDULE':
-        if (currentUser?.permissions?.includes('EDIT_SCHEDULE')) {
+        if (hasPerm('EDIT_SCHEDULE')) {
           return <EditSchedule employees={employees} scheduleData={scheduleData} setScheduleData={setScheduleData} abbreviations={abbreviations} config={config} refreshData={fetchAllData} showAlert={showAlert} />;
         }
         return <AccessDenied />;
       case 'MANAGE_EMPLOYEES':
-        if (currentUser?.permissions?.includes('MANAGE_EMPLOYEES')) {
-          return <ManageEmployees employees={employees} config={config} refreshData={fetchAllData} showAlert={showAlert} showConfirm={showConfirm} />;
+        if (hasPerm('VIEW_EMPLOYEES')) {
+          return <ManageEmployees employees={employees} config={config} refreshData={fetchAllData} showAlert={showAlert} showConfirm={showConfirm} userPermissions={userPermissions} />;
         }
         return <AccessDenied />;
       case 'MANAGE_ABBRS':
-        if (currentUser?.permissions?.includes('MANAGE_ABBRS')) {
-          return <ManageAbbreviations abbreviations={abbreviations} config={config} refreshData={fetchAllData} showAlert={showAlert} showConfirm={showConfirm} />;
+        if (hasPerm('VIEW_ABBRS')) {
+          return <ManageAbbreviations abbreviations={abbreviations} config={config} refreshData={fetchAllData} showAlert={showAlert} showConfirm={showConfirm} userPermissions={userPermissions} />;
         }
         return <AccessDenied />;
       case 'SYSTEM_ADMIN':
-        if (currentUser?.permissions?.includes('SYSTEM_ADMIN')) {
+        if (hasPerm('MANAGE_SYSTEM') || hasPerm('MANAGE_ANNOUNCEMENTS')) {
           return <SystemAdmin 
                     config={config} 
                     setConfig={setConfig} 
@@ -381,6 +417,7 @@ export default function App() {
                     refreshData={fetchAllData}
                     showAlert={showAlert} 
                     showConfirm={showConfirm} 
+                    userPermissions={userPermissions}
                  />;
         }
         return <AccessDenied />;
@@ -388,6 +425,8 @@ export default function App() {
         return <ViewSchedule employees={employees} scheduleData={scheduleData} abbreviations={abbreviations} />;
     }
   };
+
+  const showManagementSection = hasPerm('VIEW_EMPLOYEES') || hasPerm('VIEW_ABBRS') || hasPerm('MANAGE_SYSTEM') || hasPerm('MANAGE_ANNOUNCEMENTS');
 
   return (
     <div className="flex h-screen font-sans text-sm" style={{ backgroundColor: BG_BODY }}>
@@ -418,7 +457,7 @@ export default function App() {
         <div className="p-4 font-bold text-lg flex items-center justify-between border-b border-white/10" style={{ backgroundColor: 'rgba(0,0,0,0.1)' }}>
           <div className="flex items-center gap-2">
             <Calendar className="text-emerald-300" />
-            <span>Lịch Trực BIDV</span>
+            <span>Lịch Trực Nhóm Quản trị Core Banking</span>
           </div>
           <button className="lg:hidden p-1 hover:bg-white/10 rounded-lg" onClick={() => setIsMobileMenuOpen(false)}>
             <X size={20} />
@@ -428,20 +467,20 @@ export default function App() {
         <nav className="flex-1 py-4 overflow-y-auto">
           <NavItem icon={<Calendar />} label="Xem Lịch Trực" active={currentView === 'VIEW_SCHEDULE'} onClick={() => handleNavClick('VIEW_SCHEDULE')} />
           
-          {currentUser?.permissions?.includes('EDIT_SCHEDULE') && (
+          {hasPerm('EDIT_SCHEDULE') && (
             <NavItem icon={<Edit />} label="Cập Nhật Lịch" active={currentView === 'EDIT_SCHEDULE'} onClick={() => handleNavClick('EDIT_SCHEDULE')} />
           )}
           
-          {(currentUser?.permissions?.includes('MANAGE_EMPLOYEES') || currentUser?.permissions?.includes('MANAGE_ABBRS') || currentUser?.permissions?.includes('SYSTEM_ADMIN')) && (
+          {showManagementSection && (
             <div className="px-4 py-2 mt-4 text-xs font-semibold text-emerald-200/50 uppercase tracking-wider">Quản lý</div>
           )}
-          {currentUser?.permissions?.includes('MANAGE_EMPLOYEES') && (
+          {hasPerm('VIEW_EMPLOYEES') && (
             <NavItem icon={<Users />} label="Cán Bộ Trực" active={currentView === 'MANAGE_EMPLOYEES'} onClick={() => handleNavClick('MANAGE_EMPLOYEES')} />
           )}
-          {currentUser?.permissions?.includes('MANAGE_ABBRS') && (
+          {hasPerm('VIEW_ABBRS') && (
             <NavItem icon={<BookOpen />} label="Từ Viết Tắt" active={currentView === 'MANAGE_ABBRS'} onClick={() => handleNavClick('MANAGE_ABBRS')} />
           )}
-          {currentUser?.permissions?.includes('SYSTEM_ADMIN') && (
+          {(hasPerm('MANAGE_SYSTEM') || hasPerm('MANAGE_ANNOUNCEMENTS')) && (
             <NavItem icon={<Settings />} label="Hệ Thống & Phân Quyền" active={currentView === 'SYSTEM_ADMIN'} onClick={() => handleNavClick('SYSTEM_ADMIN')} />
           )}
         </nav>
@@ -537,7 +576,6 @@ function AnnouncementBanner({ announcements }) {
 
   return (
     <div ref={bannerRef} className="relative z-20 shrink-0">
-       {/* Thanh hiển thị thông báo mới nhất */}
        <div 
           className="bg-gradient-to-r from-amber-100 to-yellow-100 border-b border-yellow-200 text-yellow-800 px-4 py-2.5 sm:py-3 text-xs sm:text-sm flex items-start sm:items-center gap-3 shadow-sm w-full cursor-pointer hover:bg-yellow-200/50 transition-colors"
           onClick={() => setIsExpanded(!isExpanded)}
@@ -557,7 +595,6 @@ function AnnouncementBanner({ announcements }) {
           </div>
        </div>
 
-       {/* Panel Sổ xuống hiển thị lịch sử thông báo */}
        {isExpanded && (
           <div className="absolute top-full left-0 right-0 bg-white border-b shadow-xl max-h-[60vh] sm:max-h-[400px] flex flex-col z-30 animate-in slide-in-from-top-2 duration-200">
              <div className="p-3 border-b bg-gray-50 flex items-center justify-between gap-4 sticky top-0 shrink-0">
@@ -913,7 +950,7 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
                        </div>
                     </div>
                     <div className="flex-1 flex flex-col min-h-0">
-                       {/* Sinh nhật Độc lập - Giữ ở trên cùng */}
+                       {/* Sinh nhật Độc lập */}
                        {(() => {
                           const bdays = employees.filter(emp => isBirthday(date, emp.birthday));
                           if (bdays.length > 0) {
@@ -957,7 +994,7 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
                               );
                            };
 
-                           // Cuối tuần: Chỉ có khối trực, không chia đôi
+                           // Cuối tuần: Chỉ có khối trực
                            if (isWeekend) {
                                return (
                                    <div className="flex-1 flex flex-col min-h-0 mt-2">
@@ -1270,10 +1307,15 @@ function EditSchedule({ employees, scheduleData, setScheduleData, abbreviations,
 // ==========================================
 // COMPONENT: MANAGE EMPLOYEES
 // ==========================================
-function ManageEmployees({ employees, config, refreshData, showAlert, showConfirm }) {
+function ManageEmployees({ employees, config, refreshData, showAlert, showConfirm, userPermissions }) {
   const [isEditing, setIsEditing] = useState(false);
   const [currentEmp, setCurrentEmp] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const canAdd = userPermissions.includes('ADD_EMPLOYEE');
+  const canEdit = userPermissions.includes('EDIT_EMPLOYEE');
+  const canDelete = userPermissions.includes('DELETE_EMPLOYEE');
+  const hasActions = canEdit || canDelete;
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -1343,13 +1385,15 @@ function ManageEmployees({ employees, config, refreshData, showAlert, showConfir
     <div className="p-4 sm:p-6 max-w-4xl mx-auto w-full">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 sm:mb-6 mt-2 sm:mt-4">
         <h1 className="text-xl sm:text-2xl font-bold" style={{ color: HEADER_COLOR }}>Quản Lý Cán Bộ</h1>
-        <button 
-          onClick={() => { setCurrentEmp(null); setIsEditing(true); }}
-          className="flex items-center justify-center gap-2 text-white px-4 py-2 rounded shadow hover:opacity-90 w-full sm:w-auto"
-          style={{ backgroundColor: HEADER_COLOR }}
-        >
-          <Plus size={18} /> Thêm Cán Bộ
-        </button>
+        {canAdd && (
+          <button 
+            onClick={() => { setCurrentEmp(null); setIsEditing(true); }}
+            className="flex items-center justify-center gap-2 text-white px-4 py-2 rounded shadow hover:opacity-90 w-full sm:w-auto"
+            style={{ backgroundColor: HEADER_COLOR }}
+          >
+            <Plus size={18} /> Thêm Cán Bộ
+          </button>
+        )}
       </div>
 
       {isEditing && (
@@ -1392,22 +1436,24 @@ function ManageEmployees({ employees, config, refreshData, showAlert, showConfir
               <th className="p-3 whitespace-nowrap">Mã CB</th>
               <th className="p-3 whitespace-nowrap">Ngày sinh</th>
               <th className="p-3 whitespace-nowrap">Email</th>
-              <th className="p-3 w-24 text-center whitespace-nowrap">Thao tác</th>
+              {hasActions && <th className="p-3 w-24 text-center whitespace-nowrap">Thao tác</th>}
             </tr>
           </thead>
           <tbody>
             {employees.length === 0 ? (
-              <tr><td colSpan={5} className="p-6 text-center text-gray-500">Chưa có dữ liệu</td></tr>
+              <tr><td colSpan={hasActions ? 5 : 4} className="p-6 text-center text-gray-500">Chưa có dữ liệu</td></tr>
             ) : employees.map(emp => (
               <tr key={emp.id} className="border-b hover:bg-gray-50">
                 <td className="p-3 font-medium text-gray-800">{emp.name}</td>
                 <td className="p-3 text-gray-700 font-medium text-xs sm:text-sm">{emp.empCode}</td>
                 <td className="p-3 text-gray-600 text-xs sm:text-sm whitespace-nowrap">{emp.birthday}</td>
                 <td className="p-3 text-gray-600 text-xs sm:text-sm">{emp.email}</td>
-                <td className="p-3 flex justify-center gap-3">
-                  <button onClick={() => { setCurrentEmp(emp); setIsEditing(true); }} className="text-blue-600 hover:bg-blue-50 p-1.5 rounded" title="Sửa"><Edit size={16} /></button>
-                  <button onClick={() => handleDelete(emp.rowIndex)} className="text-red-600 hover:bg-red-50 p-1.5 rounded" title="Xóa"><Trash2 size={16} /></button>
-                </td>
+                {hasActions && (
+                  <td className="p-3 flex justify-center gap-3">
+                    {canEdit && <button onClick={() => { setCurrentEmp(emp); setIsEditing(true); }} className="text-blue-600 hover:bg-blue-50 p-1.5 rounded" title="Sửa"><Edit size={16} /></button>}
+                    {canDelete && <button onClick={() => handleDelete(emp.rowIndex)} className="text-red-600 hover:bg-red-50 p-1.5 rounded" title="Xóa"><Trash2 size={16} /></button>}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -1420,10 +1466,15 @@ function ManageEmployees({ employees, config, refreshData, showAlert, showConfir
 // ==========================================
 // COMPONENT: MANAGE ABBREVIATIONS
 // ==========================================
-function ManageAbbreviations({ abbreviations, config, refreshData, showAlert, showConfirm }) {
+function ManageAbbreviations({ abbreviations, config, refreshData, showAlert, showConfirm, userPermissions }) {
   const [isEditing, setIsEditing] = useState(false);
   const [currentAbbr, setCurrentAbbr] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const canAdd = userPermissions.includes('ADD_ABBR');
+  const canEdit = userPermissions.includes('EDIT_ABBR');
+  const canDelete = userPermissions.includes('DELETE_ABBR');
+  const hasActions = canEdit || canDelete;
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -1486,13 +1537,15 @@ function ManageAbbreviations({ abbreviations, config, refreshData, showAlert, sh
     <div className="p-4 sm:p-6 max-w-4xl mx-auto w-full">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4 sm:mb-6 mt-2 sm:mt-4">
         <h1 className="text-xl sm:text-2xl font-bold" style={{ color: HEADER_COLOR }}>Danh Mục Từ Viết Tắt</h1>
-        <button 
-          onClick={() => { setCurrentAbbr(null); setIsEditing(true); }}
-          className="flex items-center justify-center gap-2 text-white px-4 py-2 rounded shadow hover:opacity-90 w-full sm:w-auto"
-          style={{ backgroundColor: HEADER_COLOR }}
-        >
-          <Plus size={18} /> Thêm Mã
-        </button>
+        {canAdd && (
+          <button 
+            onClick={() => { setCurrentAbbr(null); setIsEditing(true); }}
+            className="flex items-center justify-center gap-2 text-white px-4 py-2 rounded shadow hover:opacity-90 w-full sm:w-auto"
+            style={{ backgroundColor: HEADER_COLOR }}
+          >
+            <Plus size={18} /> Thêm Mã
+          </button>
+        )}
       </div>
 
       {isEditing && (
@@ -1523,20 +1576,22 @@ function ManageAbbreviations({ abbreviations, config, refreshData, showAlert, sh
             <tr>
               <th className="p-3 w-24 sm:w-32 whitespace-nowrap">Từ viết tắt</th>
               <th className="p-3 min-w-[200px]">Ý nghĩa</th>
-              <th className="p-3 w-24 text-center whitespace-nowrap">Thao tác</th>
+              {hasActions && <th className="p-3 w-24 text-center whitespace-nowrap">Thao tác</th>}
             </tr>
           </thead>
           <tbody>
             {abbreviations.length === 0 ? (
-              <tr><td colSpan={3} className="p-6 text-center text-gray-500">Chưa có dữ liệu</td></tr>
+              <tr><td colSpan={hasActions ? 3 : 2} className="p-6 text-center text-gray-500">Chưa có dữ liệu</td></tr>
             ) : abbreviations.map(abbr => (
               <tr key={abbr.code} className="border-b hover:bg-gray-50">
                 <td className="p-3 font-bold" style={{ color: HEADER_COLOR }}>{abbr.code}</td>
                 <td className="p-3 text-gray-600 text-sm">{abbr.meaning}</td>
-                <td className="p-3 flex justify-center gap-3">
-                  <button onClick={() => { setCurrentAbbr(abbr); setIsEditing(true); }} className="text-blue-600 hover:bg-blue-50 p-1.5 rounded" title="Sửa"><Edit size={16} /></button>
-                  <button onClick={() => handleDelete(abbr.code)} className="text-red-600 hover:bg-red-50 p-1.5 rounded" title="Xóa"><Trash2 size={16} /></button>
-                </td>
+                {hasActions && (
+                  <td className="p-3 flex justify-center gap-3">
+                    {canEdit && <button onClick={() => { setCurrentAbbr(abbr); setIsEditing(true); }} className="text-blue-600 hover:bg-blue-50 p-1.5 rounded" title="Sửa"><Edit size={16} /></button>}
+                    {canDelete && <button onClick={() => handleDelete(abbr.code)} className="text-red-600 hover:bg-red-50 p-1.5 rounded" title="Xóa"><Trash2 size={16} /></button>}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -1549,7 +1604,7 @@ function ManageAbbreviations({ abbreviations, config, refreshData, showAlert, sh
 // ==========================================
 // COMPONENT: SYSTEM ADMIN
 // ==========================================
-function SystemAdmin({ config, setConfig, appUsers, setAppUsers, announcements, refreshData, showAlert, showConfirm }) {
+function SystemAdmin({ config, setConfig, appUsers, setAppUsers, announcements, refreshData, showAlert, showConfirm, userPermissions }) {
   const [isEditingUser, setIsEditingUser] = useState(false);
   const [currentUserEdit, setCurrentUserEdit] = useState(null);
   const [selectedPermissions, setSelectedPermissions] = useState([]);
@@ -1560,7 +1615,10 @@ function SystemAdmin({ config, setConfig, appUsers, setAppUsers, announcements, 
   
   const [localAnnouncement, setLocalAnnouncement] = useState('');
   const [isSavingAnnounce, setIsSavingAnnounce] = useState(false);
-  const [editingAnnounce, setEditingAnnounce] = useState(null); // Trạng thái chứa thông báo đang sửa
+  const [editingAnnounce, setEditingAnnounce] = useState(null); 
+
+  const canSystem = userPermissions.includes('MANAGE_SYSTEM');
+  const canAnnounce = userPermissions.includes('MANAGE_ANNOUNCEMENTS');
 
   const [sheetMapping, setSheetMapping] = useState({ 
     schedule: config.mapping?.schedule || '', 
@@ -1645,7 +1703,6 @@ function SystemAdmin({ config, setConfig, appUsers, setAppUsers, announcements, 
     setIsSavingAnnounce(true);
     
     try {
-      // Xác định action: Nếu đang sửa thì dùng 'editAnnouncement', nếu tạo mới thì 'addAnnouncement'
       const payload = {
         action: editingAnnounce ? 'editAnnouncement' : 'addAnnouncement',
         mapping: config.mapping,
@@ -1754,245 +1811,279 @@ function SystemAdmin({ config, setConfig, appUsers, setAppUsers, announcements, 
       <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 mt-2 sm:mt-4" style={{ color: HEADER_COLOR }}>Quản Trị Hệ Thống</h1>
       
       {/* GHIM THÔNG BÁO TỪ SHEET MỚI */}
-      <div className="rounded-lg shadow-sm border overflow-hidden mb-6 sm:mb-8" style={{ backgroundColor: BG_CONTAINER }}>
-         <div className="p-3 sm:p-4 border-b font-bold flex items-center justify-between text-yellow-800 bg-yellow-100">
-           <div className="flex items-center gap-2">
-             <Megaphone size={18} /> Quản lý danh sách Thông Báo
+      {canAnnounce && (
+        <div className="rounded-lg shadow-sm border overflow-hidden mb-6 sm:mb-8" style={{ backgroundColor: BG_CONTAINER }}>
+           <div className="p-3 sm:p-4 border-b font-bold flex items-center justify-between text-yellow-800 bg-yellow-100">
+             <div className="flex items-center gap-2">
+               <Megaphone size={18} /> Quản lý danh sách Thông Báo
+             </div>
            </div>
-         </div>
-         <div className="p-3 sm:p-4 bg-yellow-50/50">
-            <h4 className="font-bold text-sm mb-2 text-yellow-800">
-               {editingAnnounce ? `Sửa thông báo (${editingAnnounce.timestamp})` : 'Thêm thông báo mới'}
-            </h4>
-            <textarea 
-               value={localAnnouncement}
-               onChange={(e) => setLocalAnnouncement(e.target.value)}
-               placeholder="Nhập nội dung thông báo vào đây..."
-               className="w-full border border-yellow-200 rounded p-3 focus:ring-2 outline-none text-sm min-h-[80px] bg-white"
-               style={{ focusRingColor: '#eab308' }}
-            />
-            <div className="mt-3 flex justify-end gap-2">
-               {editingAnnounce && (
-                  <button 
-                     onClick={() => { setEditingAnnounce(null); setLocalAnnouncement(''); }}
-                     className="bg-gray-200 text-gray-700 hover:bg-gray-300 px-4 py-2 rounded shadow font-bold text-sm transition-colors"
-                  >
-                     Hủy
-                  </button>
-               )}
-               <button 
-                  onClick={handleSaveAnnouncement}
-                  disabled={isSavingAnnounce}
-                  className="bg-yellow-500 text-white hover:bg-yellow-600 px-6 py-2 rounded shadow font-bold text-sm transition-colors flex items-center gap-2"
-               >
-                  {isSavingAnnounce ? <Loader size={16} className="animate-spin" /> : (editingAnnounce ? <Save size={16} /> : <Plus size={16} />)}
-                  {isSavingAnnounce ? 'Đang lưu...' : (editingAnnounce ? 'Lưu thay đổi' : 'Thêm thông báo')}
-               </button>
-            </div>
-            
-            {/* Lịch sử trong Admin */}
-            {announcements.length > 0 && (
-               <div className="mt-6 pt-4 border-t border-yellow-200/50">
-                  <h4 className="text-sm font-bold text-gray-600 mb-3">Thông báo đã gửi ({announcements.length})</h4>
-                  <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
-                     {announcements.map((ann, idx) => (
-                        <div key={idx} className="flex gap-3 bg-white p-3 rounded border border-gray-100 shadow-sm items-start">
-                           <div className="flex-1">
-                              <span className="text-[10px] text-gray-500 font-bold block mb-1">{ann.timestamp}</span>
-                              <div className="text-sm text-gray-800 whitespace-pre-wrap"><Linkify text={ann.text} /></div>
-                           </div>
-                           <div className="flex gap-1 shrink-0">
-                              <button onClick={() => { setEditingAnnounce(ann); setLocalAnnouncement(ann.text); }} className="text-blue-500 hover:bg-blue-50 p-1.5 rounded shrink-0" title="Sửa thông báo">
-                                 <Edit size={16} />
-                              </button>
-                              <button onClick={() => handleDeleteAnnouncement(ann.timestamp)} className="text-red-500 hover:bg-red-50 p-1.5 rounded shrink-0" title="Xóa thông báo">
-                                 <Trash2 size={16} />
-                              </button>
-                           </div>
-                        </div>
-                     ))}
-                  </div>
-               </div>
-            )}
-         </div>
-      </div>
-
-      <div className="rounded-lg shadow-sm border overflow-hidden mb-6 sm:mb-8" style={{ backgroundColor: BG_CONTAINER }}>
-        <div className="p-3 sm:p-4 border-b font-bold flex items-center gap-2 text-sm sm:text-base" style={{ backgroundColor: '#e6f0ee', color: HEADER_COLOR }}>
-          <BookOpen size={18} /> Cấu hình API Google Sheet
-        </div>
-        <div className="p-3 sm:p-4">
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Đường dẫn Web App (Apps Script URL)</label>
-            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
-              <input 
-                type="text" 
-                value={apiWebAppUrl}
-                onChange={(e) => setApiWebAppUrl(e.target.value)}
-                placeholder="https://script.google.com/macros/s/..." 
-                className="w-full sm:flex-1 border rounded p-2 sm:p-2.5 focus:ring-2 outline-none text-xs sm:text-sm"
-                style={{ focusRingColor: HEADER_COLOR }} 
+           <div className="p-3 sm:p-4 bg-yellow-50/50">
+              <h4 className="font-bold text-sm mb-2 text-yellow-800">
+                 {editingAnnounce ? `Sửa thông báo (${editingAnnounce.timestamp})` : 'Thêm thông báo mới'}
+              </h4>
+              <textarea 
+                 value={localAnnouncement}
+                 onChange={(e) => setLocalAnnouncement(e.target.value)}
+                 placeholder="Nhập nội dung thông báo vào đây..."
+                 className="w-full border border-yellow-200 rounded p-3 focus:ring-2 outline-none text-sm min-h-[80px] bg-white"
+                 style={{ focusRingColor: '#eab308' }}
               />
-              <button 
-                onClick={handleDetectSheets}
-                disabled={!apiWebAppUrl || isDetecting}
-                className="text-white px-4 py-2.5 rounded disabled:bg-gray-400 whitespace-nowrap text-sm font-bold shadow-sm transition-opacity hover:opacity-90 w-full sm:w-auto"
-                style={{ backgroundColor: HEADER_COLOR }}
-              >
-                {isDetecting ? 'Đang tải...' : 'Nhận diện Sheet'}
-              </button>
-            </div>
-          </div>
-
-          {(availableSheets.length > 0 || config.apiWebAppUrl) && (
-            <div className="mt-4 p-3 sm:p-4 border rounded animate-in fade-in duration-300" style={{ backgroundColor: BG_BODY }}>
-              <h3 className="font-bold mb-3 text-sm text-gray-800">Cấu hình ánh xạ dữ liệu (Mapping)</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-4">
-                <div>
-                  <label className="block text-xs sm:text-sm text-gray-600 mb-1">Lịch Trực</label>
-                  <select 
-                    value={sheetMapping.schedule}
-                    onChange={(e) => setSheetMapping({...sheetMapping, schedule: e.target.value})}
-                    className="w-full border rounded p-2 text-sm bg-white"
-                  >
-                    <option value="">-- Chọn --</option>
-                    {availableSheets.map(s => <option key={s} value={s}>{s}</option>)}
-                    {!availableSheets.length && config.mapping.schedule && <option value={config.mapping.schedule}>{config.mapping.schedule}</option>}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs sm:text-sm text-gray-600 mb-1">Từ Viết Tắt</label>
-                  <select 
-                    value={sheetMapping.abbreviations}
-                    onChange={(e) => setSheetMapping({...sheetMapping, abbreviations: e.target.value})}
-                    className="w-full border rounded p-2 text-sm bg-white"
-                  >
-                    <option value="">-- Chọn --</option>
-                    {availableSheets.map(s => <option key={s} value={s}>{s}</option>)}
-                    {!availableSheets.length && config.mapping.abbreviations && <option value={config.mapping.abbreviations}>{config.mapping.abbreviations}</option>}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs sm:text-sm text-gray-600 mb-1">Tài khoản</label>
-                  <select 
-                    value={sheetMapping.users}
-                    onChange={(e) => setSheetMapping({...sheetMapping, users: e.target.value})}
-                    className="w-full border rounded p-2 text-sm bg-white border-blue-300"
-                  >
-                    <option value="">-- Chọn --</option>
-                    {availableSheets.map(s => <option key={s} value={s}>{s}</option>)}
-                    {!availableSheets.length && config.mapping.users && <option value={config.mapping.users}>{config.mapping.users}</option>}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs sm:text-sm text-yellow-600 font-bold mb-1">Sheet Thông Báo</label>
-                  <select 
-                    value={sheetMapping.announcements}
-                    onChange={(e) => setSheetMapping({...sheetMapping, announcements: e.target.value})}
-                    className="w-full border-2 rounded p-2 text-sm bg-yellow-50 border-yellow-300 outline-none"
-                  >
-                    <option value="">-- Chọn Sheet mới --</option>
-                    {availableSheets.map(s => <option key={s} value={s}>{s}</option>)}
-                    {!availableSheets.length && config.mapping.announcements && <option value={config.mapping.announcements}>{config.mapping.announcements}</option>}
-                  </select>
-                </div>
-              </div>
-              <button onClick={handleSaveMapping} className="w-full sm:w-auto text-white px-4 py-2.5 rounded shadow text-sm flex items-center justify-center gap-2 font-bold hover:opacity-90" style={{ backgroundColor: HEADER_COLOR }}>
-                <Save size={16} /> Lưu cấu hình Mapping
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="rounded-lg shadow-sm border overflow-hidden mb-8" style={{ backgroundColor: BG_CONTAINER }}>
-        <div className="p-3 sm:p-4 border-b font-bold flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3" style={{ backgroundColor: '#e6f0ee', color: HEADER_COLOR }}>
-          <span className="text-sm sm:text-base">Quản lý Tài khoản</span>
-          <button 
-            onClick={() => { setCurrentUserEdit(null); setIsEditingUser(true); }}
-            className="flex items-center justify-center gap-1 text-white px-3 py-1.5 rounded text-sm shadow hover:opacity-90 w-full sm:w-auto"
-            style={{ backgroundColor: HEADER_COLOR }}
-          >
-            <Plus size={16} /> Thêm User
-          </button>
-        </div>
-
-        {isEditingUser && (
-          <div className="p-4 border-b border-gray-200 bg-gray-50">
-            <h3 className="font-bold mb-3 text-sm text-gray-800">{currentUserEdit ? 'Sửa thông tin User' : 'Thêm User mới'}</h3>
-            <form onSubmit={handleSaveUser} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold mb-1 text-gray-700">Tài khoản (User)</label>
-                  <input name="username" defaultValue={currentUserEdit?.User} readOnly={!!currentUserEdit} required className={`w-full border rounded p-2 text-sm ${currentUserEdit ? 'bg-gray-100 text-gray-500' : 'bg-white'}`} />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1 text-gray-700">Mật khẩu {currentUserEdit && '(Nhập để đổi)'}</label>
-                  <input name="password" type="password" placeholder={currentUserEdit ? '***' : 'Mật khẩu'} required={!currentUserEdit} className="w-full border rounded p-2 text-sm" />
-                </div>
+              <div className="mt-3 flex justify-end gap-2">
+                 {editingAnnounce && (
+                    <button 
+                       onClick={() => { setEditingAnnounce(null); setLocalAnnouncement(''); }}
+                       className="bg-gray-200 text-gray-700 hover:bg-gray-300 px-4 py-2 rounded shadow font-bold text-sm transition-colors"
+                    >
+                       Hủy
+                    </button>
+                 )}
+                 <button 
+                    onClick={handleSaveAnnouncement}
+                    disabled={isSavingAnnounce}
+                    className="bg-yellow-500 text-white hover:bg-yellow-600 px-6 py-2 rounded shadow font-bold text-sm transition-colors flex items-center gap-2"
+                 >
+                    {isSavingAnnounce ? <Loader size={16} className="animate-spin" /> : (editingAnnounce ? <Save size={16} /> : <Plus size={16} />)}
+                    {isSavingAnnounce ? 'Đang lưu...' : (editingAnnounce ? 'Lưu thay đổi' : 'Thêm thông báo')}
+                 </button>
               </div>
               
-              <div>
-                <label className="block text-xs font-bold mb-2 text-gray-700">Phân quyền chức năng</label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 bg-white p-3 border rounded">
-                  {APP_FEATURES.map(feature => (
-                    <label key={feature.id} className="flex items-center gap-2 cursor-pointer p-1">
-                      <input 
-                        type="checkbox" 
-                        checked={selectedPermissions.includes(feature.id) || currentUserEdit?.User === 'admin'}
-                        onChange={() => handleTogglePermission(feature.id)}
-                        className="rounded focus:ring-[#006D5B] w-4 h-4"
-                        style={{ accentColor: HEADER_COLOR }}
-                        disabled={currentUserEdit?.User === 'admin'}
-                      />
-                      <span className="text-sm text-gray-700">{feature.name}</span>
-                    </label>
-                  ))}
+              {/* Lịch sử trong Admin */}
+              {announcements.length > 0 && (
+                 <div className="mt-6 pt-4 border-t border-yellow-200/50">
+                    <h4 className="text-sm font-bold text-gray-600 mb-3">Thông báo đã gửi ({announcements.length})</h4>
+                    <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
+                       {announcements.map((ann, idx) => (
+                          <div key={idx} className="flex gap-3 bg-white p-3 rounded border border-gray-100 shadow-sm items-start">
+                             <div className="flex-1">
+                                <span className="text-[10px] text-gray-500 font-bold block mb-1">{ann.timestamp}</span>
+                                <div className="text-sm text-gray-800 whitespace-pre-wrap"><Linkify text={ann.text} /></div>
+                             </div>
+                             <div className="flex gap-1 shrink-0">
+                                <button onClick={() => { setEditingAnnounce(ann); setLocalAnnouncement(ann.text); }} className="text-blue-500 hover:bg-blue-50 p-1.5 rounded shrink-0" title="Sửa thông báo">
+                                   <Edit size={16} />
+                                </button>
+                                <button onClick={() => handleDeleteAnnouncement(ann.timestamp)} className="text-red-500 hover:bg-red-50 p-1.5 rounded shrink-0" title="Xóa thông báo">
+                                   <Trash2 size={16} />
+                                </button>
+                             </div>
+                          </div>
+                       ))}
+                    </div>
+                 </div>
+              )}
+           </div>
+        </div>
+      )}
+
+      {/* CẤU HÌNH API & QUẢN LÝ TÀI KHOẢN */}
+      {canSystem && (
+        <>
+          <div className="rounded-lg shadow-sm border overflow-hidden mb-6 sm:mb-8" style={{ backgroundColor: BG_CONTAINER }}>
+            <div className="p-3 sm:p-4 border-b font-bold flex items-center gap-2 text-sm sm:text-base" style={{ backgroundColor: '#e6f0ee', color: HEADER_COLOR }}>
+              <BookOpen size={18} /> Cấu hình API Google Sheet
+            </div>
+            <div className="p-3 sm:p-4">
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Đường dẫn Web App (Apps Script URL)</label>
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
+                  <input 
+                    type="text" 
+                    value={apiWebAppUrl}
+                    onChange={(e) => setApiWebAppUrl(e.target.value)}
+                    placeholder="https://script.google.com/macros/s/..." 
+                    className="w-full sm:flex-1 border rounded p-2 sm:p-2.5 focus:ring-2 outline-none text-xs sm:text-sm"
+                    style={{ focusRingColor: HEADER_COLOR }} 
+                  />
+                  <button 
+                    onClick={handleDetectSheets}
+                    disabled={!apiWebAppUrl || isDetecting}
+                    className="text-white px-4 py-2.5 rounded disabled:bg-gray-400 whitespace-nowrap text-sm font-bold shadow-sm transition-opacity hover:opacity-90 w-full sm:w-auto"
+                    style={{ backgroundColor: HEADER_COLOR }}
+                  >
+                    {isDetecting ? 'Đang tải...' : 'Nhận diện Sheet'}
+                  </button>
                 </div>
               </div>
 
-              <div className="flex gap-2 mt-4 pt-2 border-t border-gray-200">
-                <button type="submit" className="flex-1 sm:flex-none text-white px-6 py-2 rounded text-sm font-bold hover:opacity-90" style={{ backgroundColor: HEADER_COLOR }}>Lưu User</button>
-                <button type="button" onClick={() => setIsEditingUser(false)} className="flex-1 sm:flex-none bg-gray-200 text-gray-700 px-6 py-2 rounded text-sm font-bold hover:bg-gray-300">Hủy</button>
-              </div>
-            </form>
+              {(availableSheets.length > 0 || config.apiWebAppUrl) && (
+                <div className="mt-4 p-3 sm:p-4 border rounded animate-in fade-in duration-300" style={{ backgroundColor: BG_BODY }}>
+                  <h3 className="font-bold mb-3 text-sm text-gray-800">Cấu hình ánh xạ dữ liệu (Mapping)</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-4">
+                    <div>
+                      <label className="block text-xs sm:text-sm text-gray-600 mb-1">Lịch Trực</label>
+                      <select 
+                        value={sheetMapping.schedule}
+                        onChange={(e) => setSheetMapping({...sheetMapping, schedule: e.target.value})}
+                        className="w-full border rounded p-2 text-sm bg-white"
+                      >
+                        <option value="">-- Chọn --</option>
+                        {availableSheets.map(s => <option key={s} value={s}>{s}</option>)}
+                        {!availableSheets.length && config.mapping.schedule && <option value={config.mapping.schedule}>{config.mapping.schedule}</option>}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs sm:text-sm text-gray-600 mb-1">Từ Viết Tắt</label>
+                      <select 
+                        value={sheetMapping.abbreviations}
+                        onChange={(e) => setSheetMapping({...sheetMapping, abbreviations: e.target.value})}
+                        className="w-full border rounded p-2 text-sm bg-white"
+                      >
+                        <option value="">-- Chọn --</option>
+                        {availableSheets.map(s => <option key={s} value={s}>{s}</option>)}
+                        {!availableSheets.length && config.mapping.abbreviations && <option value={config.mapping.abbreviations}>{config.mapping.abbreviations}</option>}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs sm:text-sm text-gray-600 mb-1">Tài khoản</label>
+                      <select 
+                        value={sheetMapping.users}
+                        onChange={(e) => setSheetMapping({...sheetMapping, users: e.target.value})}
+                        className="w-full border rounded p-2 text-sm bg-white border-blue-300"
+                      >
+                        <option value="">-- Chọn --</option>
+                        {availableSheets.map(s => <option key={s} value={s}>{s}</option>)}
+                        {!availableSheets.length && config.mapping.users && <option value={config.mapping.users}>{config.mapping.users}</option>}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs sm:text-sm text-yellow-600 font-bold mb-1">Sheet Thông Báo</label>
+                      <select 
+                        value={sheetMapping.announcements}
+                        onChange={(e) => setSheetMapping({...sheetMapping, announcements: e.target.value})}
+                        className="w-full border-2 rounded p-2 text-sm bg-yellow-50 border-yellow-300 outline-none"
+                      >
+                        <option value="">-- Chọn Sheet mới --</option>
+                        {availableSheets.map(s => <option key={s} value={s}>{s}</option>)}
+                        {!availableSheets.length && config.mapping.announcements && <option value={config.mapping.announcements}>{config.mapping.announcements}</option>}
+                      </select>
+                    </div>
+                  </div>
+                  <button onClick={handleSaveMapping} className="w-full sm:w-auto text-white px-4 py-2.5 rounded shadow text-sm flex items-center justify-center gap-2 font-bold hover:opacity-90" style={{ backgroundColor: HEADER_COLOR }}>
+                    <Save size={16} /> Lưu cấu hình Mapping
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-        )}
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[500px]">
-            <thead className="border-b bg-gray-50 text-gray-600">
-              <tr>
-                <th className="p-3 whitespace-nowrap">Tài khoản</th>
-                <th className="p-3 whitespace-nowrap">Mật khẩu</th>
-                <th className="p-3 min-w-[150px]">Quyền</th>
-                <th className="p-3 text-center w-24 whitespace-nowrap">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              {appUsers.length === 0 ? (
-                <tr><td colSpan={4} className="p-6 text-center text-gray-500 text-sm">Chưa có dữ liệu</td></tr>
-              ) : appUsers.map(u => (
-                <tr key={u.User} className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium text-gray-800">{u.User}</td>
-                  <td className="p-3">
-                    <span className="px-2 py-1 rounded text-[10px] sm:text-xs font-bold bg-green-100 text-green-700 whitespace-nowrap">
-                      {u.Password ? 'Đã thiết lập' : 'Chưa thiết lập'}
-                    </span>
-                  </td>
-                  <td className="p-3 text-xs sm:text-sm text-gray-600">
-                    {u.User === 'admin' ? 'Tất cả quyền' : (u.Permissions ? u.Permissions.replace(/,/g, ', ') : 'Chưa cấp quyền')}
-                  </td>
-                  <td className="p-3 flex justify-center gap-2">
-                    <button onClick={() => { setCurrentUserEdit(u); setIsEditingUser(true); }} className="text-blue-600 hover:bg-blue-50 p-1.5 rounded" title="Sửa"><Edit size={16} /></button>
-                    <button onClick={() => handleDeleteUser(u.User)} className={`hover:bg-red-50 p-1.5 rounded ${u.User === 'admin' ? 'text-gray-300 cursor-not-allowed' : 'text-red-600'}`} title="Xóa" disabled={u.User === 'admin'}><Trash2 size={16} /></button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
+          <div className="rounded-lg shadow-sm border overflow-hidden mb-8" style={{ backgroundColor: BG_CONTAINER }}>
+            <div className="p-3 sm:p-4 border-b font-bold flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3" style={{ backgroundColor: '#e6f0ee', color: HEADER_COLOR }}>
+              <span className="text-sm sm:text-base">Quản lý Tài khoản</span>
+              <button 
+                onClick={() => { setCurrentUserEdit(null); setIsEditingUser(true); }}
+                className="flex items-center justify-center gap-1 text-white px-3 py-1.5 rounded text-sm shadow hover:opacity-90 w-full sm:w-auto"
+                style={{ backgroundColor: HEADER_COLOR }}
+              >
+                <Plus size={16} /> Thêm User
+              </button>
+            </div>
+
+            {isEditingUser && (
+              <div className="p-4 border-b border-gray-200 bg-gray-50">
+                <h3 className="font-bold mb-4 text-sm text-gray-800">{currentUserEdit ? 'Sửa thông tin User' : 'Thêm User mới'}</h3>
+                <form onSubmit={handleSaveUser} className="space-y-5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-bold mb-1 text-gray-700">Tài khoản (User)</label>
+                      <input name="username" defaultValue={currentUserEdit?.User} readOnly={!!currentUserEdit} required className={`w-full border rounded p-2 text-sm ${currentUserEdit ? 'bg-gray-100 text-gray-500' : 'bg-white'}`} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold mb-1 text-gray-700">Mật khẩu {currentUserEdit && '(Nhập để đổi)'}</label>
+                      <input name="password" type="password" placeholder={currentUserEdit ? '***' : 'Mật khẩu'} required={!currentUserEdit} className="w-full border rounded p-2 text-sm" />
+                    </div>
+                  </div>
+                  
+                  {/* UPDATE: Checkbox phân quyền chi tiết */}
+                  <div>
+                    <label className="block text-xs font-bold mb-2 text-gray-700">Phân quyền chức năng</label>
+                    <div className="space-y-4">
+                      {PERMISSION_GROUPS.map(group => (
+                        <div key={group.title} className="border rounded p-3 bg-white shadow-sm">
+                           <div className="font-bold text-[10px] sm:text-xs text-gray-500 uppercase tracking-wider mb-2 border-b pb-1.5">{group.title}</div>
+                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                              {group.items.map(feature => (
+                                 <label key={feature.id} className="flex items-start gap-2 cursor-pointer p-1 hover:bg-gray-50 rounded transition-colors">
+                                   <input 
+                                     type="checkbox" 
+                                     checked={selectedPermissions.includes(feature.id) || currentUserEdit?.User === 'admin'}
+                                     onChange={() => handleTogglePermission(feature.id)}
+                                     className="rounded focus:ring-[#006D5B] w-4 h-4 mt-0.5"
+                                     style={{ accentColor: HEADER_COLOR }}
+                                     disabled={currentUserEdit?.User === 'admin'}
+                                   />
+                                   <span className="text-xs sm:text-sm text-gray-700 font-medium leading-tight pt-0.5">{feature.name}</span>
+                                 </label>
+                              ))}
+                           </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-2 border-t border-gray-200">
+                    <button type="submit" className="flex-1 sm:flex-none text-white px-6 py-2 rounded text-sm font-bold hover:opacity-90" style={{ backgroundColor: HEADER_COLOR }}>Lưu User</button>
+                    <button type="button" onClick={() => setIsEditingUser(false)} className="flex-1 sm:flex-none bg-gray-200 text-gray-700 px-6 py-2 rounded text-sm font-bold hover:bg-gray-300">Hủy</button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[500px]">
+                <thead className="border-b bg-gray-50 text-gray-600">
+                  <tr>
+                    <th className="p-3 whitespace-nowrap">Tài khoản</th>
+                    <th className="p-3 whitespace-nowrap">Mật khẩu</th>
+                    <th className="p-3 min-w-[200px]">Quyền</th>
+                    <th className="p-3 text-center w-24 whitespace-nowrap">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {appUsers.length === 0 ? (
+                    <tr><td colSpan={4} className="p-6 text-center text-gray-500 text-sm">Chưa có dữ liệu</td></tr>
+                  ) : appUsers.map(u => {
+                    // Logic hiển thị quyền theo giao diện mới
+                    const isFull = u.User === 'admin';
+                    let displayedPerms = isFull ? 'Tất cả quyền' : 'Chưa cấp quyền';
+                    
+                    if (!isFull && u.Permissions) {
+                       const permsArr = u.Permissions.split(',');
+                       const namesArr = [];
+                       PERMISSION_GROUPS.forEach(g => {
+                          g.items.forEach(i => {
+                             if (permsArr.includes(i.id)) namesArr.push(i.name);
+                          })
+                       });
+                       if (namesArr.length > 0) {
+                          displayedPerms = namesArr.join(', ');
+                       }
+                    }
+
+                    return (
+                    <tr key={u.User} className="border-b hover:bg-gray-50">
+                      <td className="p-3 font-medium text-gray-800">{u.User}</td>
+                      <td className="p-3">
+                        <span className="px-2 py-1 rounded text-[10px] sm:text-xs font-bold bg-green-100 text-green-700 whitespace-nowrap">
+                          {u.Password ? 'Đã thiết lập' : 'Chưa thiết lập'}
+                        </span>
+                      </td>
+                      <td className="p-3 text-xs sm:text-[13px] text-gray-600 leading-relaxed">
+                        {displayedPerms}
+                      </td>
+                      <td className="p-3 flex justify-center gap-2">
+                        <button onClick={() => { setCurrentUserEdit(u); setIsEditingUser(true); }} className="text-blue-600 hover:bg-blue-50 p-1.5 rounded" title="Sửa"><Edit size={16} /></button>
+                        <button onClick={() => handleDeleteUser(u.User)} className={`hover:bg-red-50 p-1.5 rounded ${u.User === 'admin' ? 'text-gray-300 cursor-not-allowed' : 'text-red-600'}`} title="Xóa" disabled={u.User === 'admin'}><Trash2 size={16} /></button>
+                      </td>
+                    </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
