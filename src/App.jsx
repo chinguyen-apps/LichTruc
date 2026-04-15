@@ -481,7 +481,7 @@ export default function App() {
             <NavItem icon={<BookOpen />} label="Từ Viết Tắt" active={currentView === 'MANAGE_ABBRS'} onClick={() => handleNavClick('MANAGE_ABBRS')} />
           )}
           {(hasPerm('MANAGE_SYSTEM') || hasPerm('MANAGE_ANNOUNCEMENTS')) && (
-            <NavItem icon={<Settings />} label="Hệ Thống & Phân Quyền" active={currentView === 'SYSTEM_ADMIN'} onClick={() => handleNavClick('SYSTEM_ADMIN')} />
+            <NavItem icon={<Settings />} label="Cấu hình Hệ Thống" active={currentView === 'SYSTEM_ADMIN'} onClick={() => handleNavClick('SYSTEM_ADMIN')} />
           )}
         </nav>
 
