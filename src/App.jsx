@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   Calendar, Users, BookOpen, Settings, LogIn, LogOut, 
   Plus, Save, Edit, Trash2, Search, AlertCircle, Loader,
   ChevronLeft, ChevronRight, CalendarDays, Columns, Menu, X,
-  Star, Clock, Gift
+  Star, Clock, Gift, Megaphone, ChevronDown, ChevronUp, History,
+  Copy, Check
 } from 'lucide-react';
 
 // --- THEME COLORS ---
@@ -117,6 +118,62 @@ const isBirthday = (dateObj, birthdayStr) => {
   return false;
 };
 
+// ==========================================
+// COMPONENT UTILS: LINKIFY & COPY BUTTON
+// ==========================================
+const Linkify = ({ text }) => {
+  if (!text) return null;
+  // Biểu thức chính quy phát hiện URL
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  
+  return (
+    <span>
+      {parts.map((part, i) => {
+        if (part.match(urlRegex)) {
+          return (
+            <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800 underline break-all" onClick={(e) => e.stopPropagation()}>
+              {part}
+            </a>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </span>
+  );
+};
+
+const CopyButton = ({ text, className = "" }) => {
+  const [copied, setCopied] = useState(false);
+  
+  const handleCopy = (e) => {
+    e.stopPropagation();
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text);
+      } else {
+        const textArea = document.createElement("textarea");
+        textArea.value = text;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        textArea.remove();
+      }
+    } catch (err) {
+      console.error('Lỗi khi copy:', err);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  
+  return (
+    <button onClick={handleCopy} className={`p-1.5 rounded transition-colors shrink-0 ${className}`} title="Copy nội dung">
+      {copied ? <Check size={16} className="text-green-600" /> : <Copy size={16} />}
+    </button>
+  );
+};
+
+
 export default function App() {
   const [currentView, setCurrentView] = useState('VIEW_SCHEDULE');
   const [currentUser, setCurrentUser] = useState(null);
@@ -131,12 +188,15 @@ export default function App() {
       if (!parsedConfig.apiWebAppUrl) {
         parsedConfig.apiWebAppUrl = DEFAULT_API_URL;
       }
+      if (!parsedConfig.mapping.announcements) {
+         parsedConfig.mapping.announcements = 'Sheet4';
+      }
       return parsedConfig;
     }
     
     return { 
       apiWebAppUrl: DEFAULT_API_URL, 
-      mapping: { schedule: 'Sheet1', abbreviations: 'Sheet2', users: 'Sheet3' } 
+      mapping: { schedule: 'Sheet1', abbreviations: 'Sheet2', users: 'Sheet3', announcements: 'Sheet4' } 
     };
   });
   
@@ -144,6 +204,7 @@ export default function App() {
   const [abbreviations, setAbbreviations] = useState([]);
   const [scheduleData, setScheduleData] = useState({});
   const [appUsers, setAppUsers] = useState([]);
+  const [announcements, setAnnouncements] = useState([]); 
   const [isLoading, setIsLoading] = useState(false);
 
   const [alertData, setAlertData] = useState({ show: false, message: '', type: 'info' });
@@ -181,6 +242,7 @@ export default function App() {
       if (data.success) {
         setAppUsers(data.data.users || []);
         setAbbreviations(data.data.abbreviations || []);
+        setAnnouncements(data.data.announcements || []); 
         
         const rawHeaders = data.data.rawSchedule?.headers || [];
         const rawRows = data.data.rawSchedule?.rows || [];
@@ -310,7 +372,16 @@ export default function App() {
         return <AccessDenied />;
       case 'SYSTEM_ADMIN':
         if (currentUser?.permissions?.includes('SYSTEM_ADMIN')) {
-          return <SystemAdmin config={config} setConfig={setConfig} appUsers={appUsers} setAppUsers={setAppUsers} showAlert={showAlert} showConfirm={showConfirm} />;
+          return <SystemAdmin 
+                    config={config} 
+                    setConfig={setConfig} 
+                    appUsers={appUsers} 
+                    setAppUsers={setAppUsers} 
+                    announcements={announcements}
+                    refreshData={fetchAllData}
+                    showAlert={showAlert} 
+                    showConfirm={showConfirm} 
+                 />;
         }
         return <AccessDenied />;
       default:
@@ -400,14 +471,19 @@ export default function App() {
           <span className="font-bold text-lg">Lịch Trực BIDV</span>
         </div>
 
+        {/* COMPONENT THÔNG BÁO GHIM TÍCH HỢP MỚI */}
+        {announcements.length > 0 && currentView === 'VIEW_SCHEDULE' && (
+          <AnnouncementBanner announcements={announcements} />
+        )}
+
         {(!config.apiWebAppUrl && currentView !== 'SYSTEM_ADMIN') && (
-          <div className="w-full p-2 bg-yellow-100 text-yellow-800 text-center text-xs sm:text-sm font-bold shadow-sm z-10 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2">
+          <div className="w-full p-2 bg-yellow-100 text-yellow-800 text-center text-xs sm:text-sm font-bold shadow-sm z-10 flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 shrink-0">
             <AlertCircle size={16} className="shrink-0" /> 
             <span>Chưa kết nối Google Sheet. Đăng nhập admin (mật khẩu: cbs@123) để cấu hình.</span>
           </div>
         )}
 
-        <div className="flex-1 overflow-auto flex flex-col relative bg-transparent">
+        <div className="flex-1 overflow-auto flex flex-col relative bg-transparent z-0">
           {renderMainContent()}
         </div>
       </div>
@@ -425,6 +501,101 @@ function NavItem({ icon, label, active, onClick }) {
     >
       {React.cloneElement(icon, { size: 18 })}
       <span className="truncate">{label}</span>
+    </div>
+  );
+}
+
+// ==========================================
+// COMPONENT: ANNOUNCEMENT BANNER 
+// ==========================================
+function AnnouncementBanner({ announcements }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const bannerRef = useRef(null);
+
+  const latestAnnouncement = announcements[0]; 
+  
+  const filteredAnnouncements = useMemo(() => {
+     if (!searchTerm.trim()) return announcements;
+     const term = searchTerm.toLowerCase();
+     return announcements.filter(a => a.text.toLowerCase().includes(term) || a.timestamp.toLowerCase().includes(term));
+  }, [announcements, searchTerm]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (bannerRef.current && !bannerRef.current.contains(event.target)) {
+        setIsExpanded(false);
+      }
+    };
+    if (isExpanded) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isExpanded]);
+
+  return (
+    <div ref={bannerRef} className="relative z-20 shrink-0">
+       {/* Thanh hiển thị thông báo mới nhất */}
+       <div 
+          className="bg-gradient-to-r from-amber-100 to-yellow-100 border-b border-yellow-200 text-yellow-800 px-4 py-2.5 sm:py-3 text-xs sm:text-sm flex items-start sm:items-center gap-3 shadow-sm w-full cursor-pointer hover:bg-yellow-200/50 transition-colors"
+          onClick={() => setIsExpanded(!isExpanded)}
+       >
+          <div className="bg-yellow-200 p-1.5 rounded-full text-yellow-700 shrink-0 mt-0.5 sm:mt-0">
+            <Megaphone size={16} className="animate-pulse" />
+          </div>
+          <div className="flex-1 whitespace-pre-wrap break-words leading-relaxed text-yellow-900/90 font-medium line-clamp-1 sm:line-clamp-2">
+            <span className="text-yellow-600 mr-2 text-[10px] sm:text-xs font-bold">[{latestAnnouncement.timestamp}]</span>
+            <Linkify text={latestAnnouncement.text} />
+          </div>
+          <div className="shrink-0 flex items-center gap-1 sm:gap-2">
+             <CopyButton text={latestAnnouncement.text} className="hover:bg-yellow-200 text-yellow-700" />
+             <div className="text-yellow-600 p-1 bg-yellow-200/50 rounded-full">
+               {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+             </div>
+          </div>
+       </div>
+
+       {/* Panel Sổ xuống hiển thị lịch sử thông báo */}
+       {isExpanded && (
+          <div className="absolute top-full left-0 right-0 bg-white border-b shadow-xl max-h-[60vh] sm:max-h-[400px] flex flex-col z-30 animate-in slide-in-from-top-2 duration-200">
+             <div className="p-3 border-b bg-gray-50 flex items-center justify-between gap-4 sticky top-0 shrink-0">
+                <div className="flex items-center gap-2 text-gray-700 font-bold text-sm">
+                   <History size={16} /> Lịch sử thông báo
+                </div>
+                <div className="relative w-full max-w-xs flex-1 sm:flex-none">
+                  <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400" size={14} />
+                  <input 
+                    type="text" 
+                    placeholder="Tìm kiếm thông báo..." 
+                    className="pl-8 pr-3 py-1.5 w-full border rounded-md focus:outline-none focus:ring-2 shadow-sm text-xs sm:text-sm bg-white"
+                    style={{ outlineColor: '#eab308' }}
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+             </div>
+             
+             <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar bg-gray-50/50">
+                {filteredAnnouncements.length > 0 ? filteredAnnouncements.map((item, idx) => (
+                   <div key={idx} className={`p-3 rounded-lg border ${idx === 0 ? 'bg-yellow-50/50 border-yellow-200' : 'bg-white border-gray-200'}`}>
+                      <div className="flex justify-between items-start mb-1.5">
+                         <div className="text-[10px] sm:text-xs text-gray-500 font-semibold flex items-center gap-1.5">
+                            <Clock size={12}/> {item.timestamp}
+                            {idx === 0 && <span className="bg-red-500 text-white text-[9px] px-1.5 rounded uppercase tracking-widest">Mới nhất</span>}
+                         </div>
+                         <CopyButton text={item.text} className="hover:bg-gray-200 text-gray-500" />
+                      </div>
+                      <div className="text-sm text-gray-800 whitespace-pre-wrap"><Linkify text={item.text} /></div>
+                   </div>
+                )) : (
+                   <div className="text-center text-gray-400 py-6 text-sm italic">Không tìm thấy thông báo nào.</div>
+                )}
+             </div>
+          </div>
+       )}
     </div>
   );
 }
@@ -533,7 +704,6 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
 
   const dayNames = ['Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7', 'CN'];
 
-  // Hàm xử lý gom nhóm và sắp xếp chung cho cả Ngày và Tuần
   const processDayDuties = (rawDuties) => {
      const map = {};
      rawDuties.forEach(duty => {
@@ -549,7 +719,7 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
      };
 
      list.forEach(item => {
-        item.isWorking = item.shifts.some(s => !isRestingCode(s.code)); // Có mã trực => Tính là Trực
+        item.isWorking = item.shifts.some(s => !isRestingCode(s.code)); 
         item.earliestStart = Math.min(...item.shifts.map(s => getShiftTime(s.code).start));
      });
 
@@ -761,7 +931,7 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
                           return null;
                        })()}
 
-                       {/* Chia thành khối Trực và Nghỉ */}
+                       {/* Chia thành 2 khối Trực và Nghỉ (50/50 độc lập) */}
                        {(() => {
                            const workingList = processedList.filter(item => item.isWorking);
                            const restingList = processedList.filter(item => !item.isWorking);
@@ -787,7 +957,7 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
                               );
                            };
 
-                           // Rêng cuối tuần, không phân chia Trực và Nghỉ, ẩn hoàn toàn danh sách Cán Bộ Nghỉ
+                           // Cuối tuần: Chỉ có khối trực, không chia đôi
                            if (isWeekend) {
                                return (
                                    <div className="flex-1 flex flex-col min-h-0 mt-2">
@@ -1057,7 +1227,6 @@ function EditSchedule({ employees, scheduleData, setScheduleData, abbreviations,
             <thead className="bg-amber-50 sticky top-0 z-10 shadow-sm border-b border-amber-200">
               <tr>
                 <th className="border-r border-amber-100 p-2 text-center w-36 sm:w-48 sticky left-0 bg-amber-50 z-20 text-gray-700 font-bold text-xs sm:text-sm">Họ và tên</th>
-                <th className="border-r border-amber-100 p-2 text-center w-32 sm:w-48 sticky left-36 sm:left-48 bg-amber-50 z-20 text-gray-700 font-bold text-xs sm:text-sm">Email</th>
                 {daysInMonth.map((date, idx) => (
                   <th key={idx} className="border-r border-amber-100 p-2 min-w-[40px] sm:min-w-[50px] text-center text-[10px] sm:text-xs font-bold text-gray-600">
                     {formatDisplayDate(date)}
@@ -1067,11 +1236,10 @@ function EditSchedule({ employees, scheduleData, setScheduleData, abbreviations,
             </thead>
             <tbody>
               {employees.length === 0 ? (
-                 <tr><td colSpan={daysInMonth.length + 2} className="p-8 text-center text-gray-400">Chưa có dữ liệu Cán bộ.</td></tr>
+                 <tr><td colSpan={daysInMonth.length + 1} className="p-8 text-center text-gray-400">Chưa có dữ liệu Cán bộ.</td></tr>
               ) : employees.map((emp, rIdx) => (
                 <tr key={emp.id} className="hover:bg-amber-50/30 focus-within:bg-amber-50/50">
                   <td className="border p-2 sticky left-0 bg-white font-medium z-10 whitespace-nowrap text-gray-800 shadow-[1px_0_0_0_#fef3c7] text-xs sm:text-sm">{emp.name}</td>
-                  <td className="border p-2 sticky left-36 sm:left-48 bg-white text-gray-500 text-[10px] sm:text-xs z-10 shadow-[1px_0_0_0_#fef3c7] truncate max-w-[120px] sm:max-w-[190px]">{emp.email}</td>
                   {daysInMonth.map((date, cIdx) => {
                     const dateStr = formatDate(date);
                     const val = editGrid[emp.id]?.[dateStr] || '';
@@ -1381,7 +1549,7 @@ function ManageAbbreviations({ abbreviations, config, refreshData, showAlert, sh
 // ==========================================
 // COMPONENT: SYSTEM ADMIN
 // ==========================================
-function SystemAdmin({ config, setConfig, appUsers, setAppUsers, showAlert, showConfirm }) {
+function SystemAdmin({ config, setConfig, appUsers, setAppUsers, announcements, refreshData, showAlert, showConfirm }) {
   const [isEditingUser, setIsEditingUser] = useState(false);
   const [currentUserEdit, setCurrentUserEdit] = useState(null);
   const [selectedPermissions, setSelectedPermissions] = useState([]);
@@ -1390,10 +1558,15 @@ function SystemAdmin({ config, setConfig, appUsers, setAppUsers, showAlert, show
   const [isDetecting, setIsDetecting] = useState(false);
   const [availableSheets, setAvailableSheets] = useState([]);
   
+  const [localAnnouncement, setLocalAnnouncement] = useState('');
+  const [isSavingAnnounce, setIsSavingAnnounce] = useState(false);
+  const [editingAnnounce, setEditingAnnounce] = useState(null); // Trạng thái chứa thông báo đang sửa
+
   const [sheetMapping, setSheetMapping] = useState({ 
     schedule: config.mapping?.schedule || '', 
     abbreviations: config.mapping?.abbreviations || '',
-    users: config.mapping?.users || '' 
+    users: config.mapping?.users || '',
+    announcements: config.mapping?.announcements || 'Sheet4' 
   });
 
   useEffect(() => {
@@ -1403,6 +1576,7 @@ function SystemAdmin({ config, setConfig, appUsers, setAppUsers, showAlert, show
       setSelectedPermissions([]);
     }
   }, [currentUserEdit]);
+
 
   const handleTogglePermission = (featureId) => {
     setSelectedPermissions(prev => 
@@ -1458,6 +1632,74 @@ function SystemAdmin({ config, setConfig, appUsers, setAppUsers, showAlert, show
     }
   };
 
+  const handleSaveAnnouncement = async () => {
+    if (!config.apiWebAppUrl || !config.mapping.announcements) {
+       showAlert("Chưa cấu hình Sheet Thông báo!", "error");
+       return;
+    }
+    if (!localAnnouncement.trim()) {
+       showAlert("Vui lòng nhập nội dung thông báo!", "error");
+       return;
+    }
+    
+    setIsSavingAnnounce(true);
+    
+    try {
+      // Xác định action: Nếu đang sửa thì dùng 'editAnnouncement', nếu tạo mới thì 'addAnnouncement'
+      const payload = {
+        action: editingAnnounce ? 'editAnnouncement' : 'addAnnouncement',
+        mapping: config.mapping,
+        text: localAnnouncement,
+        ...(editingAnnounce ? { timestamp: editingAnnounce.timestamp } : {})
+      };
+
+      const response = await fetch(config.apiWebAppUrl, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+      });
+      const result = await response.json();
+      
+      if (result.success) {
+        setLocalAnnouncement('');
+        setEditingAnnounce(null);
+        showAlert(editingAnnounce ? "Đã cập nhật thông báo!" : "Đã thêm thông báo mới!");
+        refreshData();
+      } else {
+        showAlert("Lỗi: " + result.error, "error");
+      }
+    } catch (error) {
+      showAlert("Lỗi kết nối khi lưu thông báo!", "error");
+    } finally {
+      setIsSavingAnnounce(false);
+    }
+  };
+
+  const handleDeleteAnnouncement = (timestamp) => {
+    showConfirm("Xóa thông báo này?", async () => {
+      try {
+        const res = await fetch(config.apiWebAppUrl, {
+          method: 'POST',
+          body: JSON.stringify({ action: 'deleteAnnouncement', mapping: config.mapping, timestamp }),
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' }
+        });
+        const result = await res.json();
+        if (result.success) {
+          showAlert("Đã xóa thông báo!");
+          if (editingAnnounce && editingAnnounce.timestamp === timestamp) {
+             setEditingAnnounce(null);
+             setLocalAnnouncement('');
+          }
+          refreshData();
+        } else {
+          showAlert("Lỗi: " + result.error, "error");
+        }
+      } catch(e) {
+        showAlert("Lỗi kết nối!", "error");
+      }
+    });
+  };
+
   const handleDeleteUser = (username) => {
     if (username === 'admin') {
       showAlert("Không thể xóa tài khoản admin!", "error");
@@ -1495,8 +1737,8 @@ function SystemAdmin({ config, setConfig, appUsers, setAppUsers, showAlert, show
       showAlert("Vui lòng nhập link!", "error");
       return;
     }
-    if (!sheetMapping.schedule || !sheetMapping.abbreviations || !sheetMapping.users) {
-      showAlert("Vui lòng map đủ 3 sheet!", "error");
+    if (!sheetMapping.schedule || !sheetMapping.abbreviations || !sheetMapping.users || !sheetMapping.announcements) {
+      showAlert("Vui lòng map đủ 4 sheet!", "error");
       return;
     }
     
@@ -1511,6 +1753,70 @@ function SystemAdmin({ config, setConfig, appUsers, setAppUsers, showAlert, show
     <div className="p-4 sm:p-6 max-w-4xl mx-auto w-full">
       <h1 className="text-xl sm:text-2xl font-bold mb-4 sm:mb-6 mt-2 sm:mt-4" style={{ color: HEADER_COLOR }}>Quản Trị Hệ Thống</h1>
       
+      {/* GHIM THÔNG BÁO TỪ SHEET MỚI */}
+      <div className="rounded-lg shadow-sm border overflow-hidden mb-6 sm:mb-8" style={{ backgroundColor: BG_CONTAINER }}>
+         <div className="p-3 sm:p-4 border-b font-bold flex items-center justify-between text-yellow-800 bg-yellow-100">
+           <div className="flex items-center gap-2">
+             <Megaphone size={18} /> Quản lý danh sách Thông Báo
+           </div>
+         </div>
+         <div className="p-3 sm:p-4 bg-yellow-50/50">
+            <h4 className="font-bold text-sm mb-2 text-yellow-800">
+               {editingAnnounce ? `Sửa thông báo (${editingAnnounce.timestamp})` : 'Thêm thông báo mới'}
+            </h4>
+            <textarea 
+               value={localAnnouncement}
+               onChange={(e) => setLocalAnnouncement(e.target.value)}
+               placeholder="Nhập nội dung thông báo vào đây..."
+               className="w-full border border-yellow-200 rounded p-3 focus:ring-2 outline-none text-sm min-h-[80px] bg-white"
+               style={{ focusRingColor: '#eab308' }}
+            />
+            <div className="mt-3 flex justify-end gap-2">
+               {editingAnnounce && (
+                  <button 
+                     onClick={() => { setEditingAnnounce(null); setLocalAnnouncement(''); }}
+                     className="bg-gray-200 text-gray-700 hover:bg-gray-300 px-4 py-2 rounded shadow font-bold text-sm transition-colors"
+                  >
+                     Hủy
+                  </button>
+               )}
+               <button 
+                  onClick={handleSaveAnnouncement}
+                  disabled={isSavingAnnounce}
+                  className="bg-yellow-500 text-white hover:bg-yellow-600 px-6 py-2 rounded shadow font-bold text-sm transition-colors flex items-center gap-2"
+               >
+                  {isSavingAnnounce ? <Loader size={16} className="animate-spin" /> : (editingAnnounce ? <Save size={16} /> : <Plus size={16} />)}
+                  {isSavingAnnounce ? 'Đang lưu...' : (editingAnnounce ? 'Lưu thay đổi' : 'Thêm thông báo')}
+               </button>
+            </div>
+            
+            {/* Lịch sử trong Admin */}
+            {announcements.length > 0 && (
+               <div className="mt-6 pt-4 border-t border-yellow-200/50">
+                  <h4 className="text-sm font-bold text-gray-600 mb-3">Thông báo đã gửi ({announcements.length})</h4>
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto custom-scrollbar pr-1">
+                     {announcements.map((ann, idx) => (
+                        <div key={idx} className="flex gap-3 bg-white p-3 rounded border border-gray-100 shadow-sm items-start">
+                           <div className="flex-1">
+                              <span className="text-[10px] text-gray-500 font-bold block mb-1">{ann.timestamp}</span>
+                              <div className="text-sm text-gray-800 whitespace-pre-wrap"><Linkify text={ann.text} /></div>
+                           </div>
+                           <div className="flex gap-1 shrink-0">
+                              <button onClick={() => { setEditingAnnounce(ann); setLocalAnnouncement(ann.text); }} className="text-blue-500 hover:bg-blue-50 p-1.5 rounded shrink-0" title="Sửa thông báo">
+                                 <Edit size={16} />
+                              </button>
+                              <button onClick={() => handleDeleteAnnouncement(ann.timestamp)} className="text-red-500 hover:bg-red-50 p-1.5 rounded shrink-0" title="Xóa thông báo">
+                                 <Trash2 size={16} />
+                              </button>
+                           </div>
+                        </div>
+                     ))}
+                  </div>
+               </div>
+            )}
+         </div>
+      </div>
+
       <div className="rounded-lg shadow-sm border overflow-hidden mb-6 sm:mb-8" style={{ backgroundColor: BG_CONTAINER }}>
         <div className="p-3 sm:p-4 border-b font-bold flex items-center gap-2 text-sm sm:text-base" style={{ backgroundColor: '#e6f0ee', color: HEADER_COLOR }}>
           <BookOpen size={18} /> Cấu hình API Google Sheet
@@ -1541,7 +1847,7 @@ function SystemAdmin({ config, setConfig, appUsers, setAppUsers, showAlert, show
           {(availableSheets.length > 0 || config.apiWebAppUrl) && (
             <div className="mt-4 p-3 sm:p-4 border rounded animate-in fade-in duration-300" style={{ backgroundColor: BG_BODY }}>
               <h3 className="font-bold mb-3 text-sm text-gray-800">Cấu hình ánh xạ dữ liệu (Mapping)</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-4">
                 <div>
                   <label className="block text-xs sm:text-sm text-gray-600 mb-1">Lịch Trực</label>
                   <select 
@@ -1576,6 +1882,18 @@ function SystemAdmin({ config, setConfig, appUsers, setAppUsers, showAlert, show
                     <option value="">-- Chọn --</option>
                     {availableSheets.map(s => <option key={s} value={s}>{s}</option>)}
                     {!availableSheets.length && config.mapping.users && <option value={config.mapping.users}>{config.mapping.users}</option>}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs sm:text-sm text-yellow-600 font-bold mb-1">Sheet Thông Báo</label>
+                  <select 
+                    value={sheetMapping.announcements}
+                    onChange={(e) => setSheetMapping({...sheetMapping, announcements: e.target.value})}
+                    className="w-full border-2 rounded p-2 text-sm bg-yellow-50 border-yellow-300 outline-none"
+                  >
+                    <option value="">-- Chọn Sheet mới --</option>
+                    {availableSheets.map(s => <option key={s} value={s}>{s}</option>)}
+                    {!availableSheets.length && config.mapping.announcements && <option value={config.mapping.announcements}>{config.mapping.announcements}</option>}
                   </select>
                 </div>
               </div>
