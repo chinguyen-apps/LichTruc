@@ -680,7 +680,7 @@ function ViewSchedule({ employees, scheduleData, abbreviations }) {
             if (!duties[dateStr]) duties[dateStr] = [];
             const codes = String(codeStr).split(/[\s,]+/).map(c => c.trim()).filter(Boolean);
             codes.forEach(code => {
-               const abbr = abbreviations.find(a => a.code === code);
+               const abbr = abbreviations.find(a => a.code.toUpperCase() === code.toUpperCase());
                duties[dateStr].push({ emp, code, meaning: abbr ? abbr.meaning : code });
             });
           }
@@ -1288,7 +1288,7 @@ function EditSchedule({ employees, scheduleData, setScheduleData, abbreviations,
                           value={val}
                           onChange={(e) => handleCellChange(emp.id, dateStr, e.target.value)}
                           onPaste={(e) => handlePaste(e, rIdx, cIdx)}
-                          className="w-full h-full min-h-[32px] sm:min-h-[36px] px-1 text-center font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-transparent uppercase text-xs sm:text-sm"
+                          className="w-full h-full min-h-[32px] sm:min-h-[36px] px-1 text-center font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-transparent text-xs sm:text-sm"
                           style={{ color: HEADER_COLOR }}
                         />
                       </td>
